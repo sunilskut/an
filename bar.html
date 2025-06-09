@@ -68,20 +68,34 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 200px;
-            height: 100px;
-            border: 2px solid #667eea;
+            width: 250px;
+            height: 120px;
+            border: 3px solid #667eea;
             border-radius: 10px;
             background: rgba(102, 126, 234, 0.1);
         }
 
         .scanner-overlay::before {
+            content: 'Align barcode within this frame';
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .scanner-overlay::after {
             content: '';
             position: absolute;
-            top: -10px;
-            left: -10px;
-            right: -10px;
-            bottom: -10px;
+            top: -15px;
+            left: -15px;
+            right: -15px;
+            bottom: -15px;
             border: 2px solid rgba(102, 126, 234, 0.3);
             border-radius: 15px;
             animation: pulse 2s infinite;
@@ -302,6 +316,10 @@
                 this.isScanning = false;
                 this.cameraPermissionGranted = false;
                 this.stream = null;
+                this.lastScanTime = null;
+                this.lastScannedCode = null;
+                this.pendingCode = null;
+                this.pendingCodeCount = 0;
                 this.initializeElements();
                 this.bindEvents();
                 this.checkCameraPermission();
@@ -481,18 +499,26 @@
 
             initializeQuagga() {
                 return new Promise((resolve, reject) => {
-                    // Mobile-optimized Quagga configuration
+                    // High-accuracy barcode scanning configuration
                     const config = {
                         inputStream: {
                             name: "Live",
                             type: "LiveStream",
                             target: this.scanner,
                             constraints: {
-                                width: { min: 320, ideal: 640, max: 1280 },
-                                height: { min: 240, ideal: 480, max: 720 },
+                                width: { min: 640, ideal: 1280, max: 1920 },
+                                height: { min: 480, ideal: 720, max: 1080 },
                                 facingMode: { ideal: "environment" },
-                                aspectRatio: { ideal: 1.33 }
-                            }
+                                aspectRatio: { ideal: 1.77 },
+                                frameRate: { ideal: 30, max: 30 }
+                            },
+                            area: { // Define scanning area
+                                top: "20%",
+                                right: "20%",
+                                left: "20%",
+                                bottom: "20%"
+                            },
+                            singleChannel: false // Use all color channels for better accuracy
                         },
                         decoder: {
                             readers: [
@@ -501,22 +527,39 @@
                                 "ean_8_reader",
                                 "code_39_reader",
                                 "upc_reader",
-                                "upc_e_reader"
+                                "upc_e_reader",
+                                "codabar_reader",
+                                "i2of5_reader"
                             ],
                             debug: {
-                                drawBoundingBox: false,
+                                drawBoundingBox: true,
                                 showFrequency: false,
-                                drawScanline: false,
+                                drawScanline: true,
                                 showPattern: false
-                            }
+                            },
+                            multiple: false // Only decode one barcode at a time
                         },
                         locate: true,
                         locator: {
-                            halfSample: true,
-                            patchSize: "medium"
+                            halfSample: false, // Use full resolution for better accuracy
+                            patchSize: "large", // Larger patch size for better detection
+                            debug: {
+                                showCanvas: false,
+                                showPatches: false,
+                                showFoundPatches: false,
+                                showSkeleton: false,
+                                showLabels: false,
+                                showPatchLabels: false,
+                                showRemainingPatchLabels: false,
+                                boxFromPatches: {
+                                    showTransformed: false,
+                                    showTransformedBox: false,
+                                    showBB: false
+                                }
+                            }
                         },
-                        numOfWorkers: Math.min(navigator.hardwareConcurrency || 2, 2), // Limit workers on mobile
-                        frequency: 10
+                        numOfWorkers: 1, // Single worker for consistency
+                        frequency: 5 // Slower frequency for more accurate processing
                     };
 
                     Quagga.init(config, (err) => {
@@ -532,10 +575,10 @@
                             // Remove any existing listeners
                             Quagga.offDetected();
                             
-                            // Add new listener
+                            // Add new listener with validation
                             Quagga.onDetected((result) => {
-                                if (this.isScanning && result.codeResult && result.codeResult.code) {
-                                    this.handleBarcodeDetected(result.codeResult.code);
+                                if (this.isScanning && this.validateBarcodeResult(result)) {
+                                    this.handleBarcodeDetected(result.codeResult.code, result);
                                 }
                             });
                             
@@ -548,7 +591,96 @@
                 });
             }
 
-            handleBarcodeDetected(code) {
+            validateBarcodeResult(result) {
+                if (!result || !result.codeResult || !result.codeResult.code) {
+                    return false;
+                }
+
+                const code = result.codeResult.code;
+                const format = result.codeResult.format;
+                
+                // Basic validation - code should have reasonable length
+                if (code.length < 3 || code.length > 50) {
+                    console.log('Invalid code length:', code);
+                    return false;
+                }
+
+                // Check for common invalid characters or patterns
+                if (code.includes('undefined') || code.includes('null') || code.trim() === '') {
+                    console.log('Invalid code content:', code);
+                    return false;
+                }
+
+                // Format-specific validation
+                if (format === 'ean_13' && code.length !== 13) {
+                    console.log('Invalid EAN-13 length:', code);
+                    return false;
+                }
+                
+                if (format === 'ean_8' && code.length !== 8) {
+                    console.log('Invalid EAN-8 length:', code);
+                    return false;
+                }
+
+                if ((format === 'upc_a' || format === 'upc_e') && !/^\d+$/.test(code)) {
+                    console.log('Invalid UPC format:', code);
+                    return false;
+                }
+
+                // Check scanning quality/confidence
+                if (result.codeResult.decodedCodes) {
+                    const avgError = result.codeResult.decodedCodes.reduce((sum, code) => {
+                        return sum + (code.error || 0);
+                    }, 0) / result.codeResult.decodedCodes.length;
+                    
+                    // Reject if average error is too high
+                    if (avgError > 0.1) {
+                        console.log('High error rate:', avgError, 'for code:', code);
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            handleBarcodeDetected(code, result) {
+                // Additional validation with recent scans to prevent rapid duplicates
+                const now = Date.now();
+                if (this.lastScanTime && (now - this.lastScanTime) < 1000) {
+                    // Too soon after last scan, might be duplicate
+                    if (this.lastScannedCode === code) {
+                        return;
+                    }
+                }
+
+                // Store for duplicate prevention
+                this.lastScanTime = now;
+                this.lastScannedCode = code;
+
+                // Triple validation - scan same code multiple times to confirm
+                if (!this.pendingCode) {
+                    this.pendingCode = code;
+                    this.pendingCodeCount = 1;
+                    this.showStatus(`🔍 Validating: ${code}`, 'info');
+                    return;
+                }
+
+                if (this.pendingCode === code) {
+                    this.pendingCodeCount++;
+                    if (this.pendingCodeCount >= 2) { // Confirmed after 2 consistent reads
+                        this.confirmBarcodeDetection(code, result);
+                        this.pendingCode = null;
+                        this.pendingCodeCount = 0;
+                    }
+                } else {
+                    // Different code detected, reset validation
+                    this.pendingCode = code;
+                    this.pendingCodeCount = 1;
+                    this.showStatus(`🔍 Validating: ${code}`, 'info');
+                }
+            }
+
+            confirmBarcodeDetection(code, result) {
                 if (this.scannedCodes[code]) {
                     this.scannedCodes[code]++;
                 } else {
@@ -556,13 +688,13 @@
                 }
                 
                 this.updateResultsList();
-                this.showStatus(`📦 Scanned: ${code}`, 'success');
+                this.showStatus(`✅ Confirmed: ${code}`, 'success');
                 
-                // Brief pause to prevent rapid duplicate scans
+                // Brief pause to prevent rapid scanning
                 this.isScanning = false;
                 setTimeout(() => {
                     this.isScanning = true;
-                }, 1000);
+                }, 1500);
             }
 
             updateResultsList() {
