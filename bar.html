@@ -296,341 +296,270 @@
     </div>
 
     <script>
-        class BarcodeScanner {
-            constructor() {
-                this.scannedCodes = {};
-                this.isScanning = false;
-                this.cameraPermissionGranted = false;
-                this.stream = null;
-                this.initializeElements();
-                this.bindEvents();
-                this.checkCameraPermission();
+       // Modularized Barcode Scanner JavaScript
+
+let barcodeScanner = {
+    scannedCodes: {},
+    isScanning: false,
+    cameraPermissionGranted: false,
+    stream: null,
+
+    initializeElements() {
+        this.startBtn = document.getElementById('startBtn');
+        this.stopBtn = document.getElementById('stopBtn');
+        this.scannerContainer = document.getElementById('scanner-container');
+        this.scanner = document.getElementById('scanner');
+        this.results = document.getElementById('results');
+        this.resultsList = document.getElementById('resultsList');
+        this.status = document.getElementById('status');
+    },
+
+    bindEvents() {
+        this.startBtn.addEventListener('click', () => this.startScanning());
+        this.stopBtn.addEventListener('click', () => this.stopScanning());
+    },
+
+    async checkCameraPermission() {
+        try {
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                this.showStatus('⚠️ HTTPS required for camera access on mobile devices', 'error');
+                return;
             }
 
-            initializeElements() {
-                this.startBtn = document.getElementById('startBtn');
-                this.stopBtn = document.getElementById('stopBtn');
-                this.scannerContainer = document.getElementById('scanner-container');
-                this.scanner = document.getElementById('scanner');
-                this.results = document.getElementById('results');
-                this.resultsList = document.getElementById('resultsList');
-                this.status = document.getElementById('status');
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                this.showStatus('❌ Camera API not supported in this browser', 'error');
+                return;
             }
 
-            bindEvents() {
-                this.startBtn.addEventListener('click', () => this.startScanning());
-                this.stopBtn.addEventListener('click', () => this.stopScanning());
-            }
-
-            async checkCameraPermission() {
+            if ('permissions' in navigator) {
                 try {
-                    // Check if we're on HTTPS or localhost (required for camera on mobile)
-                    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-                        this.showStatus('⚠️ HTTPS required for camera access on mobile devices', 'error');
-                        return;
-                    }
-
-                    // Check if getUserMedia is available
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        this.showStatus('❌ Camera API not supported in this browser', 'error');
-                        return;
-                    }
-
-                    // Check if Permissions API is supported (not available on all mobile browsers)
-                    if ('permissions' in navigator) {
-                        try {
-                            const permission = await navigator.permissions.query({ name: 'camera' });
-                            if (permission.state === 'granted') {
-                                this.cameraPermissionGranted = true;
-                                this.showStatus('✅ Camera permission already granted', 'success');
-                            } else if (permission.state === 'denied') {
-                                this.showStatus('❌ Camera permission previously denied. Check browser settings.', 'error');
-                                this.showMobilePermissionHelp();
-                            } else {
-                                this.showStatus('ℹ️ Camera permission will be requested when you start scanning', 'info');
-                            }
-                        } catch (permError) {
-                            // Some mobile browsers don't support camera permission query
-                            console.log('Camera permission query not supported:', permError);
-                            this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
-                        }
+                    const permission = await navigator.permissions.query({ name: 'camera' });
+                    if (permission.state === 'granted') {
+                        this.cameraPermissionGranted = true;
+                        this.showStatus('✅ Camera permission already granted', 'success');
+                    } else if (permission.state === 'denied') {
+                        this.showStatus('❌ Camera permission previously denied. Check browser settings.', 'error');
+                        this.showMobilePermissionHelp();
                     } else {
-                        // Permissions API not supported (common on mobile)
-                        this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
+                        this.showStatus('ℹ️ Camera permission will be requested when you start scanning', 'info');
                     }
-                } catch (error) {
-                    console.log('Permission check error:', error);
+                } catch (permError) {
+                    console.log('Camera permission query not supported:', permError);
                     this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
                 }
+            } else {
+                this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
+            }
+        } catch (error) {
+            console.log('Permission check error:', error);
+            this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
+        }
+    },
+
+    async requestCameraPermission() {
+        try {
+            this.showStatus('🔐 Requesting camera permission...', 'info');
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('getUserMedia not supported');
             }
 
-            async requestCameraPermission() {
-                try {
-                    this.showStatus('🔐 Requesting camera permission...', 'info');
-                    
-                    // Check if getUserMedia is supported
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        throw new Error('getUserMedia not supported');
-                    }
-                    
-                    // Mobile-friendly camera constraints
-                    const constraints = {
-                        video: {
-                            facingMode: { ideal: 'environment' },
-                            width: { min: 320, ideal: 640, max: 1920 },
-                            height: { min: 240, ideal: 480, max: 1080 }
-                        },
-                        audio: false
-                    };
-                    
-                    // Try with back camera first
-                    try {
-                        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    } catch (backCameraError) {
-                        console.log('Back camera failed, trying any camera:', backCameraError);
-                        // Fallback to any available camera
-                        this.stream = await navigator.mediaDevices.getUserMedia({
-                            video: {
-                                width: { min: 320, ideal: 640 },
-                                height: { min: 240, ideal: 480 }
-                            },
-                            audio: false
-                        });
-                    }
-                    
-                    this.cameraPermissionGranted = true;
-                    this.showStatus('✅ Camera permission granted!', 'success');
-                    
-                    // Stop the stream for now, we'll restart it in Quagga
-                    if (this.stream) {
-                        this.stream.getTracks().forEach(track => track.stop());
-                    }
-                    
-                    return true;
-                } catch (error) {
-                    console.error('Camera permission error:', error);
-                    
-                    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                        this.showStatus('❌ Camera access denied. Please refresh page and allow camera access when prompted.', 'error');
-                        this.showMobilePermissionHelp();
-                    } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                        this.showStatus('❌ No camera found on this device.', 'error');
-                    } else if (error.name === 'NotSupportedError' || error.message.includes('getUserMedia not supported')) {
-                        this.showStatus('❌ Camera not supported. Please use HTTPS or a modern browser.', 'error');
-                    } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-                        this.showStatus('❌ Camera is being used by another app. Please close other camera apps.', 'error');
-                    } else {
-                        this.showStatus('❌ Camera access failed. Please refresh and try again.', 'error');
-                    }
-                    
-                    return false;
-                }
-            }
+            const constraints = {
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { min: 320, ideal: 640, max: 1920 },
+                    height: { min: 240, ideal: 480, max: 1080 }
+                },
+                audio: false
+            };
 
-            showMobilePermissionHelp() {
-                const userAgent = navigator.userAgent.toLowerCase();
-                let helpText = '';
-                
-                if (userAgent.includes('chrome')) {
-                    helpText = '📱 Chrome: Tap the camera icon in address bar → Allow';
-                } else if (userAgent.includes('safari')) {
-                    helpText = '📱 Safari: Tap "aA" in address bar → Website Settings → Camera → Allow';
-                } else if (userAgent.includes('firefox')) {
-                    helpText = '📱 Firefox: Tap shield icon → Permissions → Camera → Allow';
-                } else {
-                    helpText = '📱 Check browser settings to allow camera access for this site';
-                }
-                
-                setTimeout(() => {
-                    this.showStatus(helpText, 'info');
-                }, 2000);
-            }
-
-            showStatus(message, type = 'info') {
-                this.status.innerHTML = `<div class="status-message status-${type}">${message}</div>`;
-                setTimeout(() => {
-                    this.status.innerHTML = '';
-                }, 4000);
-            }
-
-            async startScanning() {
-                try {
-                    // First, ensure we have camera permission
-                    if (!this.cameraPermissionGranted) {
-                        const permissionGranted = await this.requestCameraPermission();
-                        if (!permissionGranted) {
-                            return;
-                        }
-                    }
-
-                    this.isScanning = true;
-                    this.startBtn.classList.add('hidden');
-                    this.stopBtn.classList.remove('hidden');
-                    this.scannerContainer.classList.remove('hidden');
-                    
-                    this.showStatus('📷 Initializing scanner...', 'info');
-
-                    await this.initializeQuagga();
-                    this.showStatus('✅ Scanner ready! Point camera at barcode', 'success');
-                } catch (error) {
-                    console.error('Error starting scanner:', error);
-                    this.showStatus('❌ Failed to start scanner. Please refresh and try again.', 'error');
-                    this.resetUI();
-                }
-            }
-
-            initializeQuagga() {
-                return new Promise((resolve, reject) => {
-                    // Mobile-optimized Quagga configuration
-                    const config = {
-                        inputStream: {
-                            name: "Live",
-                            type: "LiveStream",
-                            target: this.scanner,
-                            constraints: {
-                                width: { min: 320, ideal: 640, max: 1280 },
-                                height: { min: 240, ideal: 480, max: 720 },
-                                facingMode: { ideal: "environment" },
-                                aspectRatio: { ideal: 1.33 }
-                            }
-                        },
-                        decoder: {
-                            readers: [
-                                "code_128_reader",
-                                "ean_reader",
-                                "ean_8_reader",
-                                "code_39_reader",
-                                "upc_reader",
-                                "upc_e_reader"
-                            ],
-                            debug: {
-                                drawBoundingBox: false,
-                                showFrequency: false,
-                                drawScanline: false,
-                                showPattern: false
-                            }
-                        },
-                        locate: true,
-                        locator: {
-                            halfSample: true,
-                            patchSize: "medium"
-                        },
-                        numOfWorkers: Math.min(navigator.hardwareConcurrency || 2, 2), // Limit workers on mobile
-                        frequency: 10
-                    };
-
-                    Quagga.init(config, (err) => {
-                        if (err) {
-                            console.error('Quagga initialization error:', err);
-                            reject(err);
-                            return;
-                        }
-                        
-                        try {
-                            Quagga.start();
-                            
-                            // Remove any existing listeners
-                            Quagga.offDetected();
-                            
-                            // Add new listener
-                            Quagga.onDetected((result) => {
-                                if (this.isScanning && result.codeResult && result.codeResult.code) {
-                                    this.handleBarcodeDetected(result.codeResult.code);
-                                }
-                            });
-                            
-                            resolve();
-                        } catch (startError) {
-                            console.error('Quagga start error:', startError);
-                            reject(startError);
-                        }
-                    });
+            try {
+                this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+            } catch (backCameraError) {
+                console.log('Back camera failed, trying any camera:', backCameraError);
+                this.stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { min: 320, ideal: 640 }, height: { min: 240, ideal: 480 } },
+                    audio: false
                 });
             }
 
-            handleBarcodeDetected(code) {
-                if (this.scannedCodes[code]) {
-                    this.scannedCodes[code]++;
-                } else {
-                    this.scannedCodes[code] = 1;
-                }
-                
-                this.updateResultsList();
-                this.showStatus(`📦 Scanned: ${code}`, 'success');
-                
-                // Brief pause to prevent rapid duplicate scans
-                this.isScanning = false;
-                setTimeout(() => {
-                    this.isScanning = true;
-                }, 1000);
+            this.cameraPermissionGranted = true;
+            this.showStatus('✅ Camera permission granted!', 'success');
+
+            if (this.stream) {
+                this.stream.getTracks().forEach(track => track.stop());
             }
 
-            updateResultsList() {
-                const codes = Object.keys(this.scannedCodes);
-                
-                if (codes.length === 0) {
-                    this.resultsList.innerHTML = '<div class="no-results">No items scanned yet</div>';
-                    return;
-                }
+            return true;
+        } catch (error) {
+            console.error('Camera permission error:', error);
+            this.handleCameraPermissionError(error);
+            return false;
+        }
+    },
 
-                const itemsHtml = codes.map(code => `
-                    <div class="result-item">
-                        <span class="barcode-text">${code}</span>
-                        <span class="count-badge">${this.scannedCodes[code]}</span>
-                    </div>
-                `).join('');
+    handleCameraPermissionError(error) {
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            this.showStatus('❌ Camera access denied. Please refresh page and allow camera access when prompted.', 'error');
+            this.showMobilePermissionHelp();
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+            this.showStatus('❌ No camera found on this device.', 'error');
+        } else if (error.name === 'NotSupportedError' || error.message.includes('getUserMedia not supported')) {
+            this.showStatus('❌ Camera not supported. Please use HTTPS or a modern browser.', 'error');
+        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+            this.showStatus('❌ Camera is being used by another app. Please close other camera apps.', 'error');
+        } else {
+            this.showStatus('❌ Camera access failed. Please refresh and try again.', 'error');
+        }
+    },
 
-                this.resultsList.innerHTML = itemsHtml;
-            }
+    showMobilePermissionHelp() {
+        const userAgent = navigator.userAgent.toLowerCase();
+        let helpText = '';
 
-            stopScanning() {
-                this.isScanning = false;
-                
-                if (typeof Quagga !== 'undefined') {
-                    try {
-                        Quagga.stop();
-                        Quagga.offDetected();
-                    } catch (error) {
-                        console.log('Error stopping Quagga:', error);
+        if (userAgent.includes('chrome')) helpText = '📱 Chrome: Tap the camera icon in address bar → Allow';
+        else if (userAgent.includes('safari')) helpText = '📱 Safari: Tap "aA" in address bar → Website Settings → Camera → Allow';
+        else if (userAgent.includes('firefox')) helpText = '📱 Firefox: Tap shield icon → Permissions → Camera → Allow';
+        else helpText = '📱 Check browser settings to allow camera access for this site';
+
+        setTimeout(() => this.showStatus(helpText, 'info'), 2000);
+    },
+
+    showStatus(message, type = 'info') {
+        this.status.innerHTML = `<div class="status-message status-${type}">${message}</div>`;
+        setTimeout(() => this.status.innerHTML = '', 4000);
+    },
+
+    async startScanning() {
+        if (!this.cameraPermissionGranted) {
+            const permissionGranted = await this.requestCameraPermission();
+            if (!permissionGranted) return;
+        }
+
+        this.isScanning = true;
+        this.startBtn.classList.add('hidden');
+        this.stopBtn.classList.remove('hidden');
+        this.scannerContainer.classList.remove('hidden');
+
+        this.showStatus('📷 Initializing scanner...', 'info');
+        await this.initializeQuagga();
+        this.showStatus('✅ Scanner ready! Point camera at barcode', 'success');
+    },
+
+    initializeQuagga() {
+        return new Promise((resolve, reject) => {
+            const config = {
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: this.scanner,
+                    constraints: {
+                        width: { min: 320, ideal: 640, max: 1280 },
+                        height: { min: 240, ideal: 480, max: 720 },
+                        facingMode: { ideal: "environment" },
+                        aspectRatio: { ideal: 1.33 }
                     }
-                }
-                
-                // Clean up any remaining video streams
-                if (this.stream) {
-                    this.stream.getTracks().forEach(track => track.stop());
-                }
-                
-                this.resetUI();
-                this.results.classList.add('printable');
-                this.showStatus('🖨️ Ready to print! Use Ctrl+P or browser menu', 'success');
-                
-                // Auto-trigger print dialog
-                setTimeout(() => {
-                    window.print();
-                }, 500);
-            }
+                },
+                decoder: {
+                    readers: ["code_128_reader", "ean_reader", "ean_8_reader", "code_39_reader", "upc_reader", "upc_e_reader"],
+                    debug: {
+                        drawBoundingBox: false,
+                        showFrequency: false,
+                        drawScanline: false,
+                        showPattern: false
+                    }
+                },
+                locate: true,
+                locator: { halfSample: true, patchSize: "medium" },
+                numOfWorkers: Math.min(navigator.hardwareConcurrency || 2, 2),
+                frequency: 10
+            };
 
-            resetUI() {
-                this.startBtn.classList.remove('hidden');
-                this.stopBtn.classList.add('hidden');
-                this.scannerContainer.classList.add('hidden');
+            Quagga.init(config, (err) => {
+                if (err) return reject(err);
+
+                try {
+                    Quagga.start();
+                    Quagga.offDetected();
+                    Quagga.onDetected(result => {
+                        if (this.isScanning && result.codeResult?.code) {
+                            this.handleBarcodeDetected(result.codeResult.code);
+                        }
+                    });
+                    resolve();
+                } catch (startError) {
+                    reject(startError);
+                }
+            });
+        });
+    },
+
+    handleBarcodeDetected(code) {
+        this.scannedCodes[code] = (this.scannedCodes[code] || 0) + 1;
+        this.updateResultsList();
+        this.showStatus(`📦 Scanned: ${code}`, 'success');
+        this.isScanning = false;
+        setTimeout(() => this.isScanning = true, 1000);
+    },
+
+    updateResultsList() {
+        const codes = Object.keys(this.scannedCodes);
+        if (!codes.length) {
+            this.resultsList.innerHTML = '<div class="no-results">No items scanned yet</div>';
+            return;
+        }
+
+        this.resultsList.innerHTML = codes.map(code => `
+            <div class="result-item">
+                <span class="barcode-text">${code}</span>
+                <span class="count-badge">${this.scannedCodes[code]}</span>
+            </div>`).join('');
+    },
+
+    stopScanning() {
+        this.isScanning = false;
+        if (typeof Quagga !== 'undefined') {
+            try {
+                Quagga.stop();
+                Quagga.offDetected();
+            } catch (error) {
+                console.log('Error stopping Quagga:', error);
             }
         }
 
-        // Initialize the scanner when the page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            new BarcodeScanner();
-        });
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => track.stop());
+        }
 
-        // Handle print events
-        window.addEventListener('beforeprint', () => {
-            document.body.style.background = 'white';
-        });
+        this.resetUI();
+        this.results.classList.add('printable');
+        this.showStatus('🖨️ Ready to print! Use Ctrl+P or browser menu', 'success');
+        setTimeout(() => window.print(), 500);
+    },
 
-        window.addEventListener('afterprint', () => {
-            document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-            document.getElementById('results').classList.remove('printable');
-        });
+    resetUI() {
+        this.startBtn.classList.remove('hidden');
+        this.stopBtn.classList.add('hidden');
+        this.scannerContainer.classList.add('hidden');
+    }
+};
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    barcodeScanner.initializeElements();
+    barcodeScanner.bindEvents();
+    barcodeScanner.checkCameraPermission();
+});
+
+// Print events
+window.addEventListener('beforeprint', () => {
+    document.body.style.background = 'white';
+});
+
+window.addEventListener('afterprint', () => {
+    document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+    document.getElementById('results').classList.remove('printable');
+});
+
     </script>
 </body>
 </html>
