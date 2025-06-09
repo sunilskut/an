@@ -216,12 +216,14 @@
 
         .status-message {
             background: rgba(255, 255, 255, 0.9);
-            padding: 10px 20px;
+            padding: 15px 20px;
             border-radius: 10px;
             margin: 10px 0;
             text-align: center;
             font-weight: 500;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            font-size: 14px;
+            line-height: 1.4;
         }
 
         .status-success {
@@ -322,20 +324,43 @@
 
             async checkCameraPermission() {
                 try {
-                    // Check if Permissions API is supported
+                    // Check if we're on HTTPS or localhost (required for camera on mobile)
+                    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                        this.showStatus('⚠️ HTTPS required for camera access on mobile devices', 'error');
+                        return;
+                    }
+
+                    // Check if getUserMedia is available
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        this.showStatus('❌ Camera API not supported in this browser', 'error');
+                        return;
+                    }
+
+                    // Check if Permissions API is supported (not available on all mobile browsers)
                     if ('permissions' in navigator) {
-                        const permission = await navigator.permissions.query({ name: 'camera' });
-                        if (permission.state === 'granted') {
-                            this.cameraPermissionGranted = true;
-                            this.showStatus('✅ Camera permission already granted', 'success');
-                        } else if (permission.state === 'denied') {
-                            this.showStatus('❌ Camera permission denied. Please enable in browser settings.', 'error');
-                        } else {
-                            this.showStatus('ℹ️ Camera permission will be requested when you start scanning', 'info');
+                        try {
+                            const permission = await navigator.permissions.query({ name: 'camera' });
+                            if (permission.state === 'granted') {
+                                this.cameraPermissionGranted = true;
+                                this.showStatus('✅ Camera permission already granted', 'success');
+                            } else if (permission.state === 'denied') {
+                                this.showStatus('❌ Camera permission previously denied. Check browser settings.', 'error');
+                                this.showMobilePermissionHelp();
+                            } else {
+                                this.showStatus('ℹ️ Camera permission will be requested when you start scanning', 'info');
+                            }
+                        } catch (permError) {
+                            // Some mobile browsers don't support camera permission query
+                            console.log('Camera permission query not supported:', permError);
+                            this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
                         }
+                    } else {
+                        // Permissions API not supported (common on mobile)
+                        this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
                     }
                 } catch (error) {
-                    console.log('Permissions API not supported, will request on demand');
+                    console.log('Permission check error:', error);
+                    this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
                 }
             }
 
@@ -343,14 +368,35 @@
                 try {
                     this.showStatus('🔐 Requesting camera permission...', 'info');
                     
-                    // Request camera access
-                    this.stream = await navigator.mediaDevices.getUserMedia({
+                    // Check if getUserMedia is supported
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        throw new Error('getUserMedia not supported');
+                    }
+                    
+                    // Mobile-friendly camera constraints
+                    const constraints = {
                         video: {
-                            facingMode: 'environment',
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
-                        }
-                    });
+                            facingMode: { ideal: 'environment' },
+                            width: { min: 320, ideal: 640, max: 1920 },
+                            height: { min: 240, ideal: 480, max: 1080 }
+                        },
+                        audio: false
+                    };
+                    
+                    // Try with back camera first
+                    try {
+                        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    } catch (backCameraError) {
+                        console.log('Back camera failed, trying any camera:', backCameraError);
+                        // Fallback to any available camera
+                        this.stream = await navigator.mediaDevices.getUserMedia({
+                            video: {
+                                width: { min: 320, ideal: 640 },
+                                height: { min: 240, ideal: 480 }
+                            },
+                            audio: false
+                        });
+                    }
                     
                     this.cameraPermissionGranted = true;
                     this.showStatus('✅ Camera permission granted!', 'success');
@@ -365,17 +411,39 @@
                     console.error('Camera permission error:', error);
                     
                     if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                        this.showStatus('❌ Camera permission denied. Please click the camera icon in address bar and allow access.', 'error');
+                        this.showStatus('❌ Camera access denied. Please refresh page and allow camera access when prompted.', 'error');
+                        this.showMobilePermissionHelp();
                     } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
                         this.showStatus('❌ No camera found on this device.', 'error');
-                    } else if (error.name === 'NotSupportedError') {
-                        this.showStatus('❌ Camera not supported in this browser.', 'error');
+                    } else if (error.name === 'NotSupportedError' || error.message.includes('getUserMedia not supported')) {
+                        this.showStatus('❌ Camera not supported. Please use HTTPS or a modern browser.', 'error');
+                    } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+                        this.showStatus('❌ Camera is being used by another app. Please close other camera apps.', 'error');
                     } else {
-                        this.showStatus('❌ Camera access failed. Please try again.', 'error');
+                        this.showStatus('❌ Camera access failed. Please refresh and try again.', 'error');
                     }
                     
                     return false;
                 }
+            }
+
+            showMobilePermissionHelp() {
+                const userAgent = navigator.userAgent.toLowerCase();
+                let helpText = '';
+                
+                if (userAgent.includes('chrome')) {
+                    helpText = '📱 Chrome: Tap the camera icon in address bar → Allow';
+                } else if (userAgent.includes('safari')) {
+                    helpText = '📱 Safari: Tap "aA" in address bar → Website Settings → Camera → Allow';
+                } else if (userAgent.includes('firefox')) {
+                    helpText = '📱 Firefox: Tap shield icon → Permissions → Camera → Allow';
+                } else {
+                    helpText = '📱 Check browser settings to allow camera access for this site';
+                }
+                
+                setTimeout(() => {
+                    this.showStatus(helpText, 'info');
+                }, 2000);
             }
 
             showStatus(message, type = 'info') {
@@ -413,16 +481,17 @@
 
             initializeQuagga() {
                 return new Promise((resolve, reject) => {
-                    Quagga.init({
+                    // Mobile-optimized Quagga configuration
+                    const config = {
                         inputStream: {
                             name: "Live",
                             type: "LiveStream",
                             target: this.scanner,
                             constraints: {
-                                width: { min: 400, ideal: 800, max: 1920 },
-                                height: { min: 250, ideal: 600, max: 1080 },
-                                facingMode: "environment",
-                                aspectRatio: { ideal: 1.6 }
+                                width: { min: 320, ideal: 640, max: 1280 },
+                                height: { min: 240, ideal: 480, max: 720 },
+                                facingMode: { ideal: "environment" },
+                                aspectRatio: { ideal: 1.33 }
                             }
                         },
                         decoder: {
@@ -431,11 +500,8 @@
                                 "ean_reader",
                                 "ean_8_reader",
                                 "code_39_reader",
-                                "code_39_vin_reader",
-                                "codabar_reader",
                                 "upc_reader",
-                                "upc_e_reader",
-                                "i2of5_reader"
+                                "upc_e_reader"
                             ],
                             debug: {
                                 drawBoundingBox: false,
@@ -449,9 +515,11 @@
                             halfSample: true,
                             patchSize: "medium"
                         },
-                        numOfWorkers: navigator.hardwareConcurrency || 2,
+                        numOfWorkers: Math.min(navigator.hardwareConcurrency || 2, 2), // Limit workers on mobile
                         frequency: 10
-                    }, (err) => {
+                    };
+
+                    Quagga.init(config, (err) => {
                         if (err) {
                             console.error('Quagga initialization error:', err);
                             reject(err);
@@ -461,8 +529,12 @@
                         try {
                             Quagga.start();
                             
+                            // Remove any existing listeners
+                            Quagga.offDetected();
+                            
+                            // Add new listener
                             Quagga.onDetected((result) => {
-                                if (this.isScanning && result.codeResult.code) {
+                                if (this.isScanning && result.codeResult && result.codeResult.code) {
                                     this.handleBarcodeDetected(result.codeResult.code);
                                 }
                             });
