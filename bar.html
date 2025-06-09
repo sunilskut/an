@@ -68,34 +68,20 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 250px;
-            height: 120px;
-            border: 3px solid #667eea;
+            width: 200px;
+            height: 100px;
+            border: 2px solid #667eea;
             border-radius: 10px;
             background: rgba(102, 126, 234, 0.1);
         }
 
         .scanner-overlay::before {
-            content: 'Align barcode within this frame';
-            position: absolute;
-            bottom: -30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 12px;
-            white-space: nowrap;
-        }
-
-        .scanner-overlay::after {
             content: '';
             position: absolute;
-            top: -15px;
-            left: -15px;
-            right: -15px;
-            bottom: -15px;
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            bottom: -10px;
             border: 2px solid rgba(102, 126, 234, 0.3);
             border-radius: 15px;
             animation: pulse 2s infinite;
@@ -230,14 +216,12 @@
 
         .status-message {
             background: rgba(255, 255, 255, 0.9);
-            padding: 15px 20px;
+            padding: 10px 20px;
             border-radius: 10px;
             margin: 10px 0;
             text-align: center;
             font-weight: 500;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            font-size: 14px;
-            line-height: 1.4;
         }
 
         .status-success {
@@ -250,17 +234,6 @@
             color: white;
         }
 
-        .camera-select {
-            padding: 10px;
-            font-size: 16px;
-            border-radius: 25px;
-            border: 1px solid #333;
-            background: white;
-            margin: 10px;
-            width: 200px;
-            cursor: pointer;
-        }
-
         @media print {
             body {
                 background: white;
@@ -269,7 +242,7 @@
                 max-width: none;
                 padding: 0;
             }
-            .scanner-container, .controls, .header, .camera-select {
+            .scanner-container, .controls, .header {
                 display: none;
             }
             .results {
@@ -287,9 +260,6 @@
                 font-size: 14px;
                 margin: 5px;
             }
-            .camera-select {
-                width: 100%;
-            }
         }
     </style>
 </head>
@@ -301,10 +271,6 @@
         </div>
 
         <div id="scanner-container" class="scanner-container hidden">
-            <select id="camera-select" class="camera-select">
-                <option value="environment">Rear Camera</option>
-                <option value="user">Front Camera</option>
-            </select>
             <div id="scanner">
                 <div class="scanner-overlay"></div>
             </div>
@@ -327,8 +293,6 @@
         </div>
     </div>
 
-    <audio id="scan-success" src="https://freesound.org/data/previews/316/316847_4939433-lq.mp3"></audio>
-
     <script>
         class BarcodeScanner {
             constructor() {
@@ -336,13 +300,8 @@
                 this.isScanning = false;
                 this.cameraPermissionGranted = false;
                 this.stream = null;
-                this.lastScanTime = null;
-                this.lastScannedCode = null;
-                this.pendingCode = null;
-                this.pendingCodeCount = 0;
                 this.initializeElements();
                 this.bindEvents();
-                this.populateCameraOptions();
                 this.checkCameraPermission();
             }
 
@@ -354,75 +313,29 @@
                 this.results = document.getElementById('results');
                 this.resultsList = document.getElementById('resultsList');
                 this.status = document.getElementById('status');
-                this.cameraSelect = document.getElementById('camera-select');
-                this.scanSuccessAudio = document.getElementById('scan-success');
             }
 
             bindEvents() {
                 this.startBtn.addEventListener('click', () => this.startScanning());
                 this.stopBtn.addEventListener('click', () => this.stopScanning());
-                this.cameraSelect.addEventListener('change', () => {
-                    if (this.isScanning) {
-                        this.stopScanning();
-                        this.startScanning();
-                    }
-                });
-            }
-
-            async populateCameraOptions() {
-                try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                    this.cameraSelect.innerHTML = '';
-                    videoDevices.forEach((device, index) => {
-                        const option = document.createElement('option');
-                        option.value = device.deviceId;
-                        option.text = device.label || `Camera ${index + 1}`;
-                        if (device.label.toLowerCase().includes('back') || index === 0) {
-                            option.selected = true; // Default to rear camera
-                        }
-                        this.cameraSelect.appendChild(option);
-                    });
-                } catch (err) {
-                    console.error('Error enumerating devices:', err);
-                    this.showStatus('❌ Failed to list cameras. Using default camera.', 'error');
-                }
             }
 
             async checkCameraPermission() {
                 try {
-                    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-                        this.showStatus('⚠️ HTTPS required for camera access on mobile devices', 'error');
-                        return;
-                    }
-
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        this.showStatus('❌ Camera API not supported in this browser', 'error');
-                        return;
-                    }
-
+                    // Check if Permissions API is supported
                     if ('permissions' in navigator) {
-                        try {
-                            const permission = await navigator.permissions.query({ name: 'camera' });
-                            if (permission.state === 'granted') {
-                                this.cameraPermissionGranted = true;
-                                this.showStatus('✅ Camera permission already granted', 'success');
-                            } else if (permission.state === 'denied') {
-                                this.showStatus('❌ Camera permission previously denied. Check browser settings.', 'error');
-                                this.showMobilePermissionHelp();
-                            } else {
-                                this.showStatus('ℹ️ Camera permission will be requested when you start scanning', 'info');
-                            }
-                        } catch (permError) {
-                            console.log('Camera permission query not supported:', permError);
-                            this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
+                        const permission = await navigator.permissions.query({ name: 'camera' });
+                        if (permission.state === 'granted') {
+                            this.cameraPermissionGranted = true;
+                            this.showStatus('✅ Camera permission already granted', 'success');
+                        } else if (permission.state === 'denied') {
+                            this.showStatus('❌ Camera permission denied. Please enable in browser settings.', 'error');
+                        } else {
+                            this.showStatus('ℹ️ Camera permission will be requested when you start scanning', 'info');
                         }
-                    } else {
-                        this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
                     }
                 } catch (error) {
-                    console.log('Permission check error:', error);
-                    this.showStatus('ℹ️ Ready to scan - tap Start Scanning to begin', 'info');
+                    console.log('Permissions API not supported, will request on demand');
                 }
             }
 
@@ -430,40 +343,19 @@
                 try {
                     this.showStatus('🔐 Requesting camera permission...', 'info');
                     
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        throw new Error('getUserMedia not supported');
-                    }
-                    
-                    const constraints = {
+                    // Request camera access
+                    this.stream = await navigator.mediaDevices.getUserMedia({
                         video: {
-                            deviceId: this.cameraSelect.value ? { exact: this.cameraSelect.value } : undefined,
-                            facingMode: this.cameraSelect.value ? undefined : { ideal: 'environment' },
-                            width: { min: 320, ideal: 640, max: 1280 },
-                            height: { min: 240, ideal: 480, max: 720 },
-                            focusMode: { ideal: 'continuous' }, // Enable continuous autofocus
-                            focusDistance: { ideal: 0.3 } // Optimize for close-range barcode scanning
-                        },
-                        audio: false
-                    };
-                    
-                    try {
-                        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    } catch (backCameraError) {
-                        console.log('Selected camera failed, trying any camera:', backCameraError);
-                        this.stream = await navigator.mediaDevices.getUserMedia({
-                            video: {
-                                width: { min: 320, ideal: 640 },
-                                height: { min: 240, ideal: 480 },
-                                focusMode: { ideal: 'continuous' },
-                                focusDistance: { ideal: 0.3 }
-                            },
-                            audio: false
-                        });
-                    }
+                            facingMode: 'environment',
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    });
                     
                     this.cameraPermissionGranted = true;
                     this.showStatus('✅ Camera permission granted!', 'success');
                     
+                    // Stop the stream for now, we'll restart it in Quagga
                     if (this.stream) {
                         this.stream.getTracks().forEach(track => track.stop());
                     }
@@ -473,39 +365,17 @@
                     console.error('Camera permission error:', error);
                     
                     if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                        this.showStatus('❌ Camera access denied. Please refresh page and allow camera access when prompted.', 'error');
-                        this.showMobilePermissionHelp();
+                        this.showStatus('❌ Camera permission denied. Please click the camera icon in address bar and allow access.', 'error');
                     } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
                         this.showStatus('❌ No camera found on this device.', 'error');
-                    } else if (error.name === 'NotSupportedError' || error.message.includes('getUserMedia not supported')) {
-                        this.showStatus('❌ Camera not supported. Please use HTTPS or a modern browser.', 'error');
-                    } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-                        this.showStatus('❌ Camera is being used by another app. Please close other camera apps.', 'error');
+                    } else if (error.name === 'NotSupportedError') {
+                        this.showStatus('❌ Camera not supported in this browser.', 'error');
                     } else {
-                        this.showStatus('❌ Camera access failed. Please refresh and try again.', 'error');
+                        this.showStatus('❌ Camera access failed. Please try again.', 'error');
                     }
                     
                     return false;
                 }
-            }
-
-            showMobilePermissionHelp() {
-                const userAgent = navigator.userAgent.toLowerCase();
-                let helpText = '';
-                
-                if (userAgent.includes('chrome')) {
-                    helpText = '📱 Chrome: Tap the camera icon in address bar → Allow';
-                } else if (userAgent.includes('safari')) {
-                    helpText = '📱 Safari: Tap "aA" in address bar → Website Settings → Camera → Allow';
-                } else if (userAgent.includes('firefox')) {
-                    helpText = '📱 Firefox: Tap shield icon → Permissions → Camera → Allow';
-                } else {
-                    helpText = '📱 Check browser settings to allow camera access for this site';
-                }
-                
-                setTimeout(() => {
-                    this.showStatus(helpText, 'info');
-                }, 2000);
             }
 
             showStatus(message, type = 'info') {
@@ -517,6 +387,7 @@
 
             async startScanning() {
                 try {
+                    // First, ensure we have camera permission
                     if (!this.cameraPermissionGranted) {
                         const permissionGranted = await this.requestCameraPermission();
                         if (!permissionGranted) {
@@ -542,27 +413,17 @@
 
             initializeQuagga() {
                 return new Promise((resolve, reject) => {
-                    const config = {
+                    Quagga.init({
                         inputStream: {
                             name: "Live",
                             type: "LiveStream",
                             target: this.scanner,
                             constraints: {
-                                deviceId: this.cameraSelect.value ? { exact: this.cameraSelect.value } : undefined,
-                                facingMode: this.cameraSelect.value ? undefined : { ideal: "environment" },
-                                width: { min: 640, ideal: 1280, max: 1920 },
-                                height: { min: 480, ideal: 720, max: 1080 },
-                                focusMode: { ideal: 'continuous' }, // Enable continuous autofocus
-                                focusDistance: { ideal: 0.3 }, // Optimize for close-range
-                                frameRate: { ideal: 30, max: 30 }
-                            },
-                            area: {
-                                top: "20%",
-                                right: "20%",
-                                left: "20%",
-                                bottom: "20%"
-                            },
-                            singleChannel: false
+                                width: { min: 400, ideal: 800, max: 1920 },
+                                height: { min: 250, ideal: 600, max: 1080 },
+                                facingMode: "environment",
+                                aspectRatio: { ideal: 1.6 }
+                            }
                         },
                         decoder: {
                             readers: [
@@ -570,43 +431,27 @@
                                 "ean_reader",
                                 "ean_8_reader",
                                 "code_39_reader",
+                                "code_39_vin_reader",
+                                "codabar_reader",
                                 "upc_reader",
                                 "upc_e_reader",
-                                "codabar_reader",
                                 "i2of5_reader"
                             ],
                             debug: {
-                                drawBoundingBox: true,
+                                drawBoundingBox: false,
                                 showFrequency: false,
-                                drawScanline: true,
+                                drawScanline: false,
                                 showPattern: false
-                            },
-                            multiple: false
+                            }
                         },
                         locate: true,
                         locator: {
-                            halfSample: false,
-                            patchSize: "large",
-                            debug: {
-                                showCanvas: false,
-                                showPatches: false,
-                                showFoundPatches: false,
-                                showSkeleton: false,
-                                showLabels: false,
-                                showPatchLabels: false,
-                                showRemainingPatchLabels: false,
-                                boxFromPatches: {
-                                    showTransformed: false,
-                                    showTransformedBox: false,
-                                    showBB: false
-                                }
-                            }
+                            halfSample: true,
+                            patchSize: "medium"
                         },
-                        numOfWorkers: 1,
-                        frequency: 5
-                    };
-
-                    Quagga.init(config, (err) => {
+                        numOfWorkers: navigator.hardwareConcurrency || 2,
+                        frequency: 10
+                    }, (err) => {
                         if (err) {
                             console.error('Quagga initialization error:', err);
                             reject(err);
@@ -616,11 +461,9 @@
                         try {
                             Quagga.start();
                             
-                            Quagga.offDetected();
-                            
                             Quagga.onDetected((result) => {
-                                if (this.isScanning && this.validateBarcodeResult(result)) {
-                                    this.handleBarcodeDetected(result.codeResult.code, result);
+                                if (this.isScanning && result.codeResult.code) {
+                                    this.handleBarcodeDetected(result.codeResult.code);
                                 }
                             });
                             
@@ -633,100 +476,21 @@
                 });
             }
 
-            validateBarcodeResult(result) {
-                if (!result || !result.codeResult || !result.codeResult.code) {
-                    return false;
-                }
-
-                const code = result.codeResult.code;
-                const format = result.codeResult.format;
-                
-                if (code.length < 3 || code.length > 50) {
-                    console.log('Invalid code length:', code);
-                    return false;
-                }
-
-                if (code.includes('undefined') || code.includes('null') || code.trim() === '') {
-                    console.log('Invalid code content:', code);
-                    return false;
-                }
-
-                if (format === 'ean_13' && code.length !== 13) {
-                    console.log('Invalid EAN-13 length:', code);
-                    return false;
-                }
-                
-                if (format === 'ean_8' && code.length !== 8) {
-                    console.log('Invalid EAN-8 length:', code);
-                    return false;
-                }
-
-                if ((format === 'upc_a' || format === 'upc_e') && !/^\d+$/.test(code)) {
-                    console.log('Invalid UPC format:', code);
-                    return false;
-                }
-
-                if (result.codeResult.decodedCodes) {
-                    const avgError = result.codeResult.decodedCodes.reduce((sum, code) => {
-                        return sum + (code.error || 0);
-                    }, 0) / result.codeResult.decodedCodes.length;
-                    
-                    if (avgError > 0.1) {
-                        console.log('High error rate:', avgError, 'for code:', code);
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-
-            handleBarcodeDetected(code, result) {
-                const now = Date.now();
-                if (this.lastScanTime && (now - this.lastScanTime) < 1000) {
-                    if (this.lastScannedCode === code) {
-                        return;
-                    }
-                }
-
-                this.lastScanTime = now;
-                this.lastScannedCode = code;
-
-                if (!this.pendingCode) {
-                    this.pendingCode = code;
-                    this.pendingCodeCount = 1;
-                    this.showStatus(`🔍 Validating: ${code}`, 'info');
-                    return;
-                }
-
-                if (this.pendingCode === code) {
-                    this.pendingCodeCount++;
-                    if (this.pendingCodeCount >= 2) {
-                        this.confirmBarcodeDetection(code, result);
-                        this.pendingCode = null;
-                        this.pendingCodeCount = 0;
-                    }
-                } else {
-                    this.pendingCode = code;
-                    this.pendingCodeCount = 1;
-                    this.showStatus(`🔍 Validating: ${code}`, 'info');
-                }
-            }
-
-            confirmBarcodeDetection(code, result) {
+            handleBarcodeDetected(code) {
                 if (this.scannedCodes[code]) {
                     this.scannedCodes[code]++;
                 } else {
                     this.scannedCodes[code] = 1;
                 }
                 
-                this.scanSuccessAudio.play();
                 this.updateResultsList();
-                this.showStatus(`✅ Confirmed: ${code}`, 'success');
+                this.showStatus(`📦 Scanned: ${code}`, 'success');
                 
+                // Brief pause to prevent rapid duplicate scans
                 this.isScanning = false;
                 setTimeout(() => {
                     this.isScanning = true;
-                }, 1500);
+                }, 1000);
             }
 
             updateResultsList() {
@@ -759,6 +523,7 @@
                     }
                 }
                 
+                // Clean up any remaining video streams
                 if (this.stream) {
                     this.stream.getTracks().forEach(track => track.stop());
                 }
@@ -767,6 +532,7 @@
                 this.results.classList.add('printable');
                 this.showStatus('🖨️ Ready to print! Use Ctrl+P or browser menu', 'success');
                 
+                // Auto-trigger print dialog
                 setTimeout(() => {
                     window.print();
                 }, 500);
@@ -779,10 +545,12 @@
             }
         }
 
+        // Initialize the scanner when the page loads
         document.addEventListener('DOMContentLoaded', () => {
             new BarcodeScanner();
         });
 
+        // Handle print events
         window.addEventListener('beforeprint', () => {
             document.body.style.background = 'white';
         });
