@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Retail Operations Hub</title>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        }
+        /* Custom styles for iframes to ensure they fill their container */
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        /* Hide scrollbars on body to prevent double scroll if iframes scroll */
+        body {
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col bg-gray-100 text-gray-800">
+
+    <!-- Header / Title -->
+    <header class="bg-blue-600 text-white p-4 text-center shadow-md rounded-b-lg">
+        <h1 class="text-xl font-semibold">Retail Operations Hub</h1>
+    </header>
+
+    <!-- Main Container for Split View -->
+    <main class="flex flex-col md:flex-row flex-grow overflow-hidden">
+        <!-- Left Half: Barcode Scanner -->
+        <section class="relative flex-grow h-1/2 md:h-full md:w-1/2 p-2 bg-white border-b md:border-b-0 md:border-r border-gray-200 shadow-sm rounded-lg m-1">
+            <h2 class="text-lg font-medium text-center mb-2">Barcode Scan</h2>
+            <iframe id="barcodeFrame" src="barcodeScan.html" title="Barcode Scanner" class="rounded-md shadow-inner"></iframe>
+            <button onclick="openFullscreen('barcodeFrame')" class="absolute top-4 right-4 bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded-full shadow-md transition duration-200 ease-in-out transform hover:scale-105">
+                Fullscreen
+            </button>
+        </section>
+
+        <!-- Right Half: Sales Bill Generation -->
+        <section class="relative flex-grow h-1/2 md:h-full md:w-1/2 p-2 bg-white shadow-sm rounded-lg m-1">
+            <h2 class="text-lg font-medium text-center mb-2">Sales Bill Generation</h2>
+            <iframe id="salesBillFrame" src="salesBillGeneration.html" title="Sales Bill Generator" class="rounded-md shadow-inner"></iframe>
+            <button onclick="openFullscreen('salesBillFrame')" class="absolute top-4 right-4 bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded-full shadow-md transition duration-200 ease-in-out transform hover:scale-105">
+                Fullscreen
+            </button>
+        </section>
+    </main>
+
+    <!-- Fullscreen Overlay -->
+    <div id="fullscreenOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-95 flex flex-col z-50 transition-opacity duration-300 ease-in-out hidden opacity-0">
+        <header class="bg-gray-800 text-white p-4 flex justify-between items-center shadow-lg">
+            <h2 class="text-lg font-semibold" id="fullscreenTitle"></h2>
+            <button onclick="closeFullscreen()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-200 ease-in-out transform hover:scale-105">
+                Close
+            </button>
+        </header>
+        <iframe id="fullscreenIframe" src="" class="flex-grow rounded-lg m-2 shadow-inner"></iframe>
+    </div>
+
+    <script>
+        /**
+         * Opens the specified iframe in fullscreen mode.
+         * @param {string} iframeId - The ID of the iframe to display in fullscreen.
+         */
+        function openFullscreen(iframeId) {
+            const iframe = document.getElementById(iframeId);
+            const overlay = document.getElementById('fullscreenOverlay');
+            const fullscreenIframe = document.getElementById('fullscreenIframe');
+            const fullscreenTitle = document.getElementById('fullscreenTitle');
+
+            // Set the source and title for the fullscreen iframe
+            fullscreenIframe.src = iframe.src;
+            fullscreenTitle.textContent = iframe.title; // Use the title attribute of the original iframe
+
+            // Show the overlay with a fade-in effect
+            overlay.classList.remove('hidden');
+            setTimeout(() => {
+                overlay.classList.remove('opacity-0');
+                overlay.classList.add('opacity-100');
+            }, 10); // Small delay for the transition to apply
+        }
+
+        /**
+         * Closes the fullscreen view and returns to the split screen layout.
+         */
+        function closeFullscreen() {
+            const overlay = document.getElementById('fullscreenOverlay');
+            const fullscreenIframe = document.getElementById('fullscreenIframe');
+
+            // Hide the overlay with a fade-out effect
+            overlay.classList.remove('opacity-100');
+            overlay.classList.add('opacity-0');
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                fullscreenIframe.src = ''; // Clear the iframe source to stop its content
+            }, 300); // Match this duration with the CSS transition duration
+        }
+    </script>
+</body>
+</html>

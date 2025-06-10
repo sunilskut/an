@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales Bill Generator</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+      color: #333;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      padding: 30px;
+      text-align: center;
+      color: white;
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .content {
+      padding: 30px;
+    }
+
+    .top-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-bottom: 30px;
+    }
+
+    .scan-section, .customer-section {
+      background: #f8fafc;
+      padding: 25px;
+      border-radius: 15px;
+      border-left: 5px solid #4facfe;
+    }
+
+    .scan-section h3, .customer-section h3 {
+      color: #2c5aa0;
+      margin-bottom: 15px;
+      font-size: 1.2rem;
+    }
+
+    .scan-status {
+      padding: 15px;
+      background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+      border-radius: 10px;
+      margin-bottom: 15px;
+    }
+
+    .customer-form {
+      display: grid;
+      gap: 15px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group label {
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: #444;
+    }
+
+    .form-group input {
+      padding: 12px 15px;
+      border: 2px solid #e1e8ed;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.3s ease;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #4facfe;
+    }
+
+    .invoice-section {
+      background: white;
+      border-radius: 15px;
+      padding: 25px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      margin-bottom: 30px;
+    }
+
+    .invoice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+
+    .invoice-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #2c5aa0;
+    }
+
+    .invoice-number {
+      font-size: 1.1rem;
+      color: #666;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 25px;
+    }
+
+    .items-table th {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+      padding: 15px 10px;
+      text-align: left;
+      font-weight: 600;
+    }
+
+    .items-table th:first-child {
+      border-radius: 10px 0 0 0;
+    }
+
+    .items-table th:last-child {
+      border-radius: 0 10px 0 0;
+    }
+
+    .items-table td {
+      padding: 12px 10px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .items-table tr:hover {
+      background: #f8fafc;
+    }
+
+    .quantity-input {
+      width: 60px;
+      padding: 5px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      text-align: center;
+    }
+
+    .remove-btn {
+      background: #ff4757;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+
+    .remove-btn:hover {
+      background: #ff3742;
+    }
+
+    .totals-section {
+      background: linear-gradient(135deg, #f8fafc 0%, #e3f2fd 100%);
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 1.1rem;
+    }
+
+    .totals-row.final {
+      font-weight: 700;
+      font-size: 1.3rem;
+      color: #2c5aa0;
+      border-top: 2px solid #4facfe;
+      padding-top: 15px;
+      margin-top: 15px;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 15px;
+      margin-top: 30px;
+    }
+
+    .btn {
+      padding: 15px 30px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+      flex: 1;
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      flex: 1;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    .alert {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 15px 20px;
+      border-radius: 10px;
+      color: white;
+      font-weight: 600;
+      z-index: 1000;
+      transform: translateX(400px);
+      transition: transform 0.3s ease;
+    }
+
+    .alert.show {
+      transform: translateX(0);
+    }
+
+    .alert.success {
+      background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+    }
+
+    .alert.error {
+      background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .print-header {
+      display: none;
+    }
+
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+      }
+
+      .container {
+        box-shadow: none;
+        background: white;
+      }
+
+      .header, .top-section, .action-buttons {
+        display: none;
+      }
+
+      .print-header {
+        display: block;
+        text-align: center;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 2px solid #333;
+      }
+
+      .invoice-section {
+        box-shadow: none;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .top-section {
+        grid-template-columns: 1fr;
+      }
+
+      .action-buttons {
+        flex-direction: column;
+      }
+
+      .items-table {
+        font-size: 0.9rem;
+      }
+
+      .items-table th, .items-table td {
+        padding: 8px 5px;
+      }
+
+      .header h1 {
+        font-size: 2rem;
+      }
+
+      .content {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+   <h1>
+  🧾 Sales Bill Generator  
+  <span 
+    style="cursor: pointer; color: blue; text-decoration: underline;" 
+    onclick="window.open('salesBillGeneration.html', '_blank')">
+    Another Bill
+  </span>
+</h1>
+
+      <p>Scan Products & Generate Professional Invoices</p>
+    </div>
+
+    <div class="content">
+      <div class="top-section">
+        <div class="scan-section">
+          <h3>🔍 Barcode Scanner</h3>
+          <div id="scanStatus" class="scan-status">
+            Waiting for barcode scan...
+          </div>
+        </div>
+
+        <div class="customer-section">
+          <h3>👤 Customer Information</h3>
+          <div class="customer-form">
+            <div class="form-group">
+              <label for="customerName">Customer Name</label>
+              <input type="text" id="customerName" placeholder="Enter customer name">
+            </div>
+            <div class="form-group">
+              <label for="customerPhone">Phone Number</label>
+              <input type="tel" id="customerPhone" placeholder="Enter phone number">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="invoice-section">
+        <div class="print-header">
+          <h1>SALES INVOICE</h1>
+          <p>Date: <span id="printDate"></span></p>
+          <p>Invoice #: <span id="printInvoiceNo"></span></p>
+        </div>
+
+        <div class="invoice-header">
+          <div class="invoice-title">Sales Invoice</div>
+          <div class="invoice-number">
+            Invoice #: <span id="invoiceNumber"></span><br>
+            Date: <span id="invoiceDate"></span>
+          </div>
+        </div>
+
+        <div id="itemsContainer">
+          <div class="empty-state">
+            <h3>📦 No items scanned yet</h3>
+            <p>Scan a barcode to add items to the invoice</p>
+          </div>
+        </div>
+
+        <div id="invoiceTable" style="display: none;">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Brand</th>
+                <th>HSN</th>
+                <th>Qty</th>
+                <th>Unit</th>
+                <th>MRP</th>
+                <th>Disc%</th>
+                <th>GST%</th>
+                <th>Amount</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="itemsTableBody">
+            </tbody>
+          </table>
+
+          <div class="totals-section">
+            <div class="totals-row">
+              <span>Subtotal:</span>
+              <span>₹<span id="subtotal">0.00</span></span>
+            </div>
+            <div class="totals-row">
+              <span>Total Discount:</span>
+              <span>₹<span id="totalDiscount">0.00</span></span>
+            </div>
+            <div class="totals-row">
+              <span>Taxable Amount:</span>
+              <span>₹<span id="taxableAmount">0.00</span></span>
+            </div>
+            <div class="totals-row">
+              <span>Total GST:</span>
+              <span>₹<span id="totalGST">0.00</span></span>
+            </div>
+            <div class="totals-row final">
+              <span>Grand Total:</span>
+              <span>₹<span id="grandTotal">0.00</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn btn-primary" onclick="printInvoice()">
+            🖨️ Print Invoice
+          </button>
+          <button class="btn btn-secondary" onclick="clearInvoice()">
+            🗑️ Clear All
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBWmCyJepagKmTy5kfBCOdaGKmcOymj4zg",
+      authDomain: "sunivox.firebaseapp.com",
+      projectId: "sunivox",
+      storageBucket: "sunivox.firebasestorage.app",
+      messagingSenderId: "866107015527",
+      appId: "1:866107015527:web:2c0733694e797dd7586fc2",
+      measurementId: "G-06NVXJVKV2"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const session = new URLSearchParams(window.location.search).get("session") || "defaultSession";
+    let invoiceItems = [];
+    let invoiceCounter = 1;
+
+    // Initialize invoice
+    document.getElementById('invoiceDate').textContent = new Date().toLocaleDateString();
+    document.getElementById('printDate').textContent = new Date().toLocaleDateString();
+ 
+   getNextInvoiceNumber().then(invoiceNumber => {
+  document.getElementById('invoiceNumber').textContent = invoiceNumber;
+ document.getElementById('printInvoiceNo').textContent = invoiceNumber;
+invoiceCounter=invoiceNumber;
+});
+
+    // Show alert function
+    function showAlert(message, type = 'success') {
+      const alert = document.createElement('div');
+      alert.className = `alert ${type}`;
+      alert.textContent = message;
+      document.body.appendChild(alert);
+      
+      setTimeout(() => alert.classList.add('show'), 100);
+      
+      setTimeout(() => {
+        alert.classList.remove('show');
+        setTimeout(() => document.body.removeChild(alert), 300);
+      }, 3000);
+    }
+
+
+
+
+    // Listen for barcode scans
+    db.collection("scans").doc(session).onSnapshot((doc) => {
+      if (doc.exists) {
+        const data = doc.data();
+        const barcode = data.value;
+        
+        document.getElementById('scanStatus').innerHTML = `
+          <strong>Scanned:</strong> ${barcode}<br>
+          <em>Looking up product...</em>
+        `;
+
+        // Look up product in database
+        db.collection("products").doc(barcode).get()
+          .then((docSnap) => {
+            if (docSnap.exists) {
+              const product = docSnap.data();
+              addItemToInvoice(barcode, product);
+              document.getElementById('scanStatus').innerHTML = `
+                <strong>✅ Added:</strong> ${product.name}<br>
+                <em>Ready for next scan</em>
+              `;
+            } else {
+              document.getElementById('scanStatus').innerHTML = `
+                <strong>❌ Product not found:</strong> ${barcode}<br>
+                <em>Please add this product to inventory first</em>
+              `;
+              showAlert("Product not found in database", "error");
+            }
+          })
+          .catch((error) => {
+            document.getElementById('scanStatus').innerHTML = `
+              <strong>❌ Error:</strong> ${error.message}
+            `;
+            showAlert("Error fetching product data", "error");
+          });
+      }
+    });
+
+    function addItemToInvoice(barcode, product) {
+      // Check if item already exists
+      const existingItemIndex = invoiceItems.findIndex(item => item.barcode === barcode);
+      
+      if (existingItemIndex > -1) {
+        // Increase quantity if item exists
+        invoiceItems[existingItemIndex].quantity += 1;
+        showAlert(`Increased quantity of ${product.name}`, "success");
+      } else {
+        // Add new item
+        const item = {
+          barcode: barcode,
+          name: product.name,
+          brand: product.brand,
+          category: product.category,
+          hsnCode: product.hsnCode,
+          mrp: product.mrp,
+          gstRate: product.gstRate || 0,
+          discount: product.discount || 0,
+          unit: product.unit,
+          quantity: 1
+        };
+        invoiceItems.push(item);
+        showAlert(`Added ${product.name} to invoice`, "success");
+      }
+      
+      renderInvoice();
+    }
+
+    function removeItem(index) {
+      const itemName = invoiceItems[index].name;
+      invoiceItems.splice(index, 1);
+      renderInvoice();
+      showAlert(`Removed ${itemName} from invoice`, "success");
+    }
+
+    function updateQuantity(index, quantity) {
+      if (quantity <= 0) {
+        removeItem(index);
+        return;
+      }
+      invoiceItems[index].quantity = parseInt(quantity);
+      renderInvoice();
+    }
+
+    function calculateItemAmount(item) {
+      const baseAmount = item.mrp * item.quantity;
+      const discountAmount = (baseAmount * item.discount) / 100;
+      const taxableAmount = baseAmount - discountAmount;
+      const gstAmount = (taxableAmount * item.gstRate) / 100;
+      const totalAmount = taxableAmount + gstAmount;
+      
+      return {
+        baseAmount,
+        discountAmount,
+        taxableAmount,
+        gstAmount,
+        totalAmount
+      };
+    }
+
+    function renderInvoice() {
+      const itemsContainer = document.getElementById('itemsContainer');
+      const invoiceTable = document.getElementById('invoiceTable');
+      const tableBody = document.getElementById('itemsTableBody');
+
+      if (invoiceItems.length === 0) {
+        itemsContainer.innerHTML = `
+          <div class="empty-state">
+            <h3>📦 No items scanned yet</h3>
+            <p>Scan a barcode to add items to the invoice</p>
+          </div>
+        `;
+        invoiceTable.style.display = 'none';
+        return;
+      }
+
+      itemsContainer.innerHTML = '';
+      invoiceTable.style.display = 'block';
+
+      let subtotal = 0;
+      let totalDiscount = 0;
+      let totalGST = 0;
+      let grandTotal = 0;
+
+      tableBody.innerHTML = invoiceItems.map((item, index) => {
+        const amounts = calculateItemAmount(item);
+        subtotal += amounts.baseAmount;
+        totalDiscount += amounts.discountAmount;
+        totalGST += amounts.gstAmount;
+        grandTotal += amounts.totalAmount;
+
+        return `
+          <tr>
+            <td><strong>${item.name}</strong></td>
+            <td>${item.brand}</td>
+            <td>${item.hsnCode}</td>
+            <td>
+              <input type="number" class="quantity-input" value="${item.quantity}" 
+                     min="1" onchange="updateQuantity(${index}, this.value)">
+            </td>
+            <td>${item.unit}</td>
+            <td>₹${item.mrp.toFixed(2)}</td>
+            <td>${item.discount}%</td>
+            <td>${item.gstRate}%</td>
+            <td><strong>₹${amounts.totalAmount.toFixed(2)}</strong></td>
+            <td>
+              <button class="remove-btn" onclick="removeItem(${index})">
+                🗑️ Remove
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Update totals
+      const taxableAmount = subtotal - totalDiscount;
+      document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+      document.getElementById('totalDiscount').textContent = totalDiscount.toFixed(2);
+      document.getElementById('taxableAmount').textContent = taxableAmount.toFixed(2);
+      document.getElementById('totalGST').textContent = totalGST.toFixed(2);
+      document.getElementById('grandTotal').textContent = grandTotal.toFixed(2);
+    }
+
+
+
+
+//const invoiceCounterRef = db.collection("meta").doc("invoiceCounter");
+
+async function getNextInvoiceNumber() {
+  try {
+    const snapshot = await db.collection("invoices").get();
+    const count = snapshot.size;
+    const newInvoiceNumber = count + 1;
+    return newInvoiceNumber;
+  } catch (error) {
+    console.error("Error getting invoice number:", error);
+    return null;
+  }
+}
+
+
+
+
+
+
+
+async    function printInvoice() {
+      if (invoiceItems.length === 0) {
+        showAlert("No items to print!", "error");
+        return;
+      }
+const invoiceNumber = await getNextInvoiceNumber();
+      // Save invoice to Firebase before printing
+      const invoiceData = {
+       // invoiceNumber: document.getElementById('invoiceNumber').textContent,
+	invoiceNumber: invoiceNumber,
+        date: new Date().toISOString(),
+        customerName: document.getElementById('customerName').value || 'Walk-in Customer',
+        customerPhone: document.getElementById('customerPhone').value || '',
+        items: invoiceItems.map(item => ({
+          ...item,
+          amounts: calculateItemAmount(item)
+        })),
+        totals: {
+          subtotal: parseFloat(document.getElementById('subtotal').textContent),
+          totalDiscount: parseFloat(document.getElementById('totalDiscount').textContent),
+          taxableAmount: parseFloat(document.getElementById('taxableAmount').textContent),
+          totalGST: parseFloat(document.getElementById('totalGST').textContent),
+          grandTotal: parseFloat(document.getElementById('grandTotal').textContent)
+        }
+      };
+
+      db.collection("invoices").add(invoiceData)
+        .then(() => {
+          showAlert("Invoice saved successfully!", "success");
+          window.print();
+        })
+        .catch((error) => {
+          showAlert("Error saving invoice: " + error.message, "error");
+        });
+    }
+
+    function clearInvoice() {
+      if (invoiceItems.length === 0) {
+        showAlert("Invoice is already empty!", "error");
+        return;
+      }
+
+      if (confirm("Are you sure you want to clear all items?")) {
+        invoiceItems = [];
+        renderInvoice();
+        
+        // Reset customer info
+        document.getElementById('customerName').value = '';
+        document.getElementById('customerPhone').value = '';
+        
+        // Update invoice number
+
+ getNextInvoiceNumber().then(invoiceNumber => {
+  document.getElementById('invoiceNumber').textContent = invoiceNumber;
+   document.getElementById('printInvoiceNo').textContent = invoiceNumber;
+});
+        
+        showAlert("Invoice cleared successfully!", "success");
+      }
+    }
+
+    // Initialize empty invoice
+    renderInvoice();
+  </script>
+</body>
+</html>
