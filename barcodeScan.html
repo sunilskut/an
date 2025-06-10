@@ -41,7 +41,7 @@
   <div id="reader"></div>
 
   <script>
-   const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyBWmCyJepagKmTy5kfBCOdaGKmcOymj4zg",
   authDomain: "sunivox.firebaseapp.com",
   projectId: "sunivox",
@@ -61,51 +61,40 @@
     const beep = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
     beep.preload = 'auto';
 
-    // Create scanner
     const html5QrCode = new Html5Qrcode("reader");
 
     function startScanner() {
       html5QrCode.start(
-        { facingMode: "environment" }, // rear camera
+        { facingMode: "environment" },
         {
           fps: 10,
           qrbox: { width: 250, height: 250 }
         },
         onScanSuccess,
         (errorMessage) => {
-          // Ignore scan errors
+          console.warn("QR Scan error: ", errorMessage);
         }
-      ).catch(err => {
+      ).then(() => {
+        // Initialize Firestore doc
+        db.collection("scans").doc(session).set({
+          value: "",
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).then(() => {
+          console.log("✅ Scanner initialized");
+        }).catch((error) => {
+          alert("❌ Firestore Error: " + error);
+        });
+      }).catch(err => {
         alert("Camera start error: " + err);
       });
-
-      // Write to Firestore
-      db.collection("scans").doc(session).set({
-        value: "",
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      }).then(() => {
-        console.log("✅ Scanner initialised! ");
-      }).catch((error) => {
-        alert("❌ Firestore Error: " + error);
-      }).finally(() => {
-        // Resume scanning after 1.5 seconds
-        setTimeout(() => {
-          html5QrCode.resume();
-        }, 500);
-      });
-
-      
     }
 
     function onScanSuccess(decodedText, decodedResult) {
-      // Pause scanning
       html5QrCode.pause();
 
-      // Play beep immediately
       beep.currentTime = 0;
       beep.play();
 
-      // Write to Firestore
       db.collection("scans").doc(session).set({
         value: decodedText,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -114,14 +103,12 @@
       }).catch((error) => {
         alert("❌ Firestore Error: " + error);
       }).finally(() => {
-        // Resume scanning after 1.5 seconds
         setTimeout(() => {
           html5QrCode.resume();
         }, 1500);
       });
     }
 
-    // Start the scanner when page loads
     startScanner();
   </script>
 
