@@ -5,11 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mobile QR Scanner</title>
 
-  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
-  <!-- QR Scanner -->
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
@@ -41,16 +39,16 @@
   <div id="reader"></div>
 
   <script>
-    // Firebase Config
-    const firebaseConfig = {
-      apiKey: "AIzaSyAZDZphWJ86vZcNDzYwXKR7biW-f9AyLG4",
-      authDomain: "universitymodule-8fac5.firebaseapp.com",
-      projectId: "universitymodule-8fac5",
-      storageBucket: "universitymodule-8fac5.firebasestorage.app",
-      messagingSenderId: "154631878754",
-      appId: "1:154631878754:web:7243c8fe784abc1626393b",
-      measurementId: "G-8TJ9ZWEK6M"
-    };
+   // Firebase config (same as mobile-scanner.html)
+     const firebaseConfig = {
+  apiKey: "AIzaSyBWmCyJepagKmTy5kfBCOdaGKmcOymj4zg",
+  authDomain: "sunivox.firebaseapp.com",
+  projectId: "sunivox",
+  storageBucket: "sunivox.firebasestorage.app",
+  messagingSenderId: "866107015527",
+  appId: "1:866107015527:web:2c0733694e797dd7586fc2",
+  measurementId: "G-06NVXJVKV2"
+};
 
     // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
@@ -58,15 +56,25 @@
 
     const session = new URLSearchParams(location.search).get("session") || "defaultSession";
 
+    // Initialize the Firestore document with an empty value and a timestamp
+    db.collection("scans").doc(session).set({
+      value: "", // Initialize with an empty string
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true }).then(() => { // Use merge: true to avoid overwriting other fields if they exist
+      console.log("Firestore document initialized with empty value.");
+    }).catch((error) => {
+      console.error("Error initializing Firestore document:", error);
+    });
+
     function onScanSuccess(decodedText, decodedResult) {
       html5QrcodeScanner.clear().then(() => {
         console.log("Scanner stopped.");
       });
 
-     const beep = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
-   beep.play();
+      const beep = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+      beep.play();
 
-      db.collection("scans").doc(session).set({
+      db.collection("scans").doc(session).update({ // Use update instead of set to only change 'value'
         value: decodedText,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
       }).then(() => {
