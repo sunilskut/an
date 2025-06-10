@@ -78,6 +78,23 @@
       ).catch(err => {
         alert("Camera start error: " + err);
       });
+
+      // Write to Firestore
+      db.collection("scans").doc(session).set({
+        value: "",
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        console.log("✅ Scanner initialised! ");
+      }).catch((error) => {
+        alert("❌ Firestore Error: " + error);
+      }).finally(() => {
+        // Resume scanning after 1.5 seconds
+        setTimeout(() => {
+          html5QrCode.resume();
+        }, 500);
+      });
+
+      
     }
 
     function onScanSuccess(decodedText, decodedResult) {
