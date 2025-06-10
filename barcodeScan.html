@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mobile QR Scanner</title>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+  <!-- QR Scanner -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f2f2f2;
+    }
+    h3 {
+      margin-top: 1em;
+      color: #333;
+    }
+    #reader {
+      width: 90vw;
+      max-width: 400px;
+      margin: 1em auto;
+    }
+    @media print {
+      #reader {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h3>📷 Scan QR Code</h3>
+  <div id="reader"></div>
+
+  <script>
+   const firebaseConfig = {
+  apiKey: "AIzaSyBWmCyJepagKmTy5kfBCOdaGKmcOymj4zg",
+  authDomain: "sunivox.firebaseapp.com",
+  projectId: "sunivox",
+  storageBucket: "sunivox.firebasestorage.app",
+  messagingSenderId: "866107015527",
+  appId: "1:866107015527:web:2c0733694e797dd7586fc2",
+  measurementId: "G-06NVXJVKV2"
+};
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const session = new URLSearchParams(location.search).get("session") || "defaultSession";
+
+    // Preload beep audio
+    const beep = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+    beep.preload = 'auto';
+
+    // Create scanner
+    const html5QrCode = new Html5Qrcode("reader");
+
+    function startScanner() {
+      html5QrCode.start(
+        { facingMode: "environment" }, // rear camera
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
+        onScanSuccess,
+        (errorMessage) => {
+          // Ignore scan errors
+        }
+      ).catch(err => {
+        alert("Camera start error: " + err);
+      });
+    }
+
+    function onScanSuccess(decodedText, decodedResult) {
+      // Pause scanning
+      html5QrCode.pause();
+
+      // Play beep immediately
+      beep.currentTime = 0;
+      beep.play();
+
+      // Write to Firestore
+      db.collection("scans").doc(session).set({
+        value: decodedText,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        console.log("✅ Data sent: " + decodedText);
+      }).catch((error) => {
+        alert("❌ Firestore Error: " + error);
+      }).finally(() => {
+        // Resume scanning after 1.5 seconds
+        setTimeout(() => {
+          html5QrCode.resume();
+        }, 1500);
+      });
+    }
+
+    // Start the scanner when page loads
+    startScanner();
+  </script>
+
+</body>
+</html>
