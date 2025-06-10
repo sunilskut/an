@@ -5,9 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mobile QR Scanner</title>
 
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
+  <!-- QR Scanner -->
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
@@ -39,8 +41,7 @@
   <div id="reader"></div>
 
   <script>
-   // Firebase config (same as mobile-scanner.html)
-     const firebaseConfig = {
+   const firebaseConfig = {
   apiKey: "AIzaSyBWmCyJepagKmTy5kfBCOdaGKmcOymj4zg",
   authDomain: "sunivox.firebaseapp.com",
   projectId: "sunivox",
@@ -56,39 +57,55 @@
 
     const session = new URLSearchParams(location.search).get("session") || "defaultSession";
 
-    // Initialize the Firestore document with an empty value and a timestamp
-    db.collection("scans").doc(session).set({
-      value: "", // Initialize with an empty string
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true }).then(() => { // Use merge: true to avoid overwriting other fields if they exist
-      console.log("Firestore document initialized with empty value.");
-    }).catch((error) => {
-      console.error("Error initializing Firestore document:", error);
-    });
+    // Preload beep audio
+    const beep = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+    beep.preload = 'auto';
 
-    function onScanSuccess(decodedText, decodedResult) {
-      html5QrcodeScanner.clear().then(() => {
-        console.log("Scanner stopped.");
-      });
+    // Create scanner
+    const html5QrCode = new Html5Qrcode("reader");
 
-      const beep = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
-      beep.play();
-
-      db.collection("scans").doc(session).update({ // Use update instead of set to only change 'value'
-        value: decodedText,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      }).then(() => {
-        alert("✅ Data sent: " + decodedText);
-      }).catch((error) => {
-        alert("❌ Firestore Error: " + error);
+    function startScanner() {
+      html5QrCode.start(
+        { facingMode: "environment" }, // rear camera
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
+        onScanSuccess,
+        (errorMessage) => {
+          // Ignore scan errors
+        }
+      ).catch(err => {
+        alert("Camera start error: " + err);
       });
     }
 
-    const html5QrcodeScanner = new Html5QrcodeScanner("reader", {
-      fps: 10,
-      qrbox: { width: 250, height: 250 }
-    });
-    html5QrcodeScanner.render(onScanSuccess);
+    function onScanSuccess(decodedText, decodedResult) {
+      // Pause scanning
+      html5QrCode.pause();
+
+      // Play beep immediately
+      beep.currentTime = 0;
+      beep.play();
+
+      // Write to Firestore
+      db.collection("scans").doc(session).set({
+        value: decodedText,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        console.log("✅ Data sent: " + decodedText);
+      }).catch((error) => {
+        alert("❌ Firestore Error: " + error);
+      }).finally(() => {
+        // Resume scanning after 1.5 seconds
+        setTimeout(() => {
+          html5QrCode.resume();
+        }, 1500);
+      });
+    }
+
+    // Start the scanner when page loads
+    startScanner();
   </script>
 
 </body>
