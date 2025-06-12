@@ -46,7 +46,13 @@
         <!-- Right Half: Sales Bill Generation -->
         <section class="relative flex-grow h-1/2 md:h-full md:w-1/2 p-2 bg-white shadow-sm rounded-lg m-1">
             <h2 class="text-lg font-medium text-center mb-2">Sales Bill Generation</h2>
-            <iframe id="salesBillFrame" src="salesBillGeneration.html" title="Sales Bill Generator" class="rounded-md shadow-inner"></iframe>
+
+<div class="overflow-auto" style="width: 125%; height: 125%;">
+  <iframe id="salesBillFrame" src="salesBillGeneration.html" title="Sales Bill Generator" class="rounded-md shadow-inner transform scale-[0.8] origin-top-left"></iframe>
+</div>
+
+
+          <!--  <iframe id="salesBillFrame" src="salesBillGeneration.html" title="Sales Bill Generator" class="rounded-md shadow-inner"></iframe> -->
             <button onclick="openFullscreen('salesBillFrame')" class="absolute top-4 right-4 bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded-full shadow-md transition duration-200 ease-in-out transform hover:scale-105">
                 Fullscreen
             </button>
