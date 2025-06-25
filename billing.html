@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enhanced Scanner & Billing System</title>
+  
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  
+  <!-- QR/Barcode Scanner -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      color: #333;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      margin-top: 20px;
+      margin-bottom: 20px;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      padding: 20px 30px;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+
+    .btn-header {
+      padding: 8px 16px;
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.3s ease;
+    }
+
+    .btn-header:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .main-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      padding: 20px;
+      min-height: 70vh;
+    }
+
+    .scanner-section {
+      background: white;
+      border-radius: 15px;
+      padding: 20px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .scanner-header {
+      margin-bottom: 20px;
+    }
+
+    .scanner-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .control-group label {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #444;
+    }
+
+    .control-select, .control-input {
+      padding: 10px;
+      border: 2px solid #e1e8ed;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.3s ease;
+    }
+
+    .control-select:focus, .control-input:focus {
+      outline: none;
+      border-color: #4facfe;
+    }
+
+    .scanner-display {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    #reader {
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .barcode-reader {
+      height: 120px;
+    }
+
+    .qr-reader {
+      height: 300px;
+    }
+
+    .scanner-status {
+      background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+      padding: 15px;
+      border-radius: 10px;
+      margin-top: 15px;
+      text-align: center;
+    }
+
+    .manual-input {
+      display: none;
+      margin-top: 15px;
+    }
+
+    .manual-input.active {
+      display: block;
+    }
+
+    .manual-input input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e1e8ed;
+      border-radius: 8px;
+      font-size: 1rem;
+      margin-bottom: 10px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+      color: white;
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+      color: white;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    .billing-section {
+      background: white;
+      border-radius: 15px;
+      padding: 20px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .customer-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #f8fafc;
+      border-radius: 10px;
+    }
+
+    .scanned-items {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 400px;
+      margin-bottom: 20px;
+    }
+
+    .item-card {
+      background: #f8fafc;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .item-info {
+      flex: 1;
+    }
+
+    .item-name {
+      font-weight: 600;
+      color: #2c5aa0;
+      margin-bottom: 4px;
+    }
+
+    .item-details {
+      font-size: 0.9rem;
+      color: #666;
+    }
+
+    .item-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .quantity-control {
+      display: flex;
+      align-items: center;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .qty-btn {
+      background: #f0f0f0;
+      border: none;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .qty-btn:hover {
+      background: #e0e0e0;
+    }
+
+    .qty-input {
+      border: none;
+      width: 50px;
+      text-align: center;
+      padding: 6px;
+    }
+
+    .item-amount {
+      font-weight: 700;
+      color: #2c5aa0;
+      font-size: 1.1rem;
+    }
+
+    .totals-summary {
+      background: linear-gradient(135deg, #f8fafc 0%, #e3f2fd 100%);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }
+
+    .grand-total {
+      font-weight: 700;
+      font-size: 1.3rem;
+      color: #2c5aa0;
+      border-top: 2px solid #4facfe;
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+
+    .action-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    .full-bill-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      overflow-y: auto;
+    }
+
+    .modal-content {
+      background: white;
+      margin: 20px auto;
+      padding: 30px;
+      border-radius: 15px;
+      max-width: 800px;
+      position: relative;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+
+    .close-modal {
+      background: none;
+      border: none;
+      font-size: 2rem;
+      cursor: pointer;
+      color: #666;
+    }
+
+    .bill-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 25px;
+    }
+
+    .bill-table th {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+      padding: 12px 8px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .bill-table td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #e1e8ed;
+      font-size: 0.9rem;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .alert {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 15px 20px;
+      border-radius: 10px;
+      color: white;
+      font-weight: 600;
+      z-index: 2000;
+      transform: translateX(400px);
+      transition: transform 0.3s ease;
+    }
+
+    .alert.show {
+      transform: translateX(0);
+    }
+
+    .alert.success {
+      background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+    }
+
+    .alert.error {
+      background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+    }
+
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      
+      .modal-content, .modal-content * {
+        visibility: visible;
+      }
+      
+      .modal-content {
+        position: absolute;
+        left: 0;
+        top: 0;
+        margin: 0;
+        padding: 20px;
+        box-shadow: none;
+        border-radius: 0;
+      }
+      
+      .modal-header button,
+      .action-buttons {
+        display: none !important;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .main-content {
+        grid-template-columns: 1fr;
+      }
+      
+      .scanner-controls {
+        grid-template-columns: 1fr;
+      }
+      
+      .customer-info {
+        grid-template-columns: 1fr;
+      }
+      
+      .action-buttons {
+        grid-template-columns: 1fr;
+      }
+      
+      .header {
+        padding: 15px 20px;
+      }
+      
+      .header h1 {
+        font-size: 1.5rem;
+      }
+      
+      .header-actions {
+        margin-top: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🛒 Enhanced Scanner & Billing System</h1>
+      <div class="header-actions">
+        <button class="btn-header" onclick="window.open('salesBillGeneration.html', '_blank')">
+          📄 New Bill
+        </button>
+        <button class="btn-header" onclick="showSettings()">
+          ⚙️ Settings
+        </button>
+        <span id="sessionInfo">Session: Default</span>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <!-- Scanner Section -->
+      <div class="scanner-section">
+        <div class="scanner-header">
+          <h2>📷 Product Scanner</h2>
+        </div>
+
+        <div class="scanner-controls">
+          <div class="control-group">
+            <label for="scanType">Scan Type</label>
+            <select id="scanType" class="control-select" onchange="changeScanType()">
+              <option value="qr">QR Code</option>
+              <option value="barcode">Barcode</option>
+              <option value="manual">Manual Entry</option>
+            </select>
+          </div>
+          
+          <div class="control-group">
+            <label for="inputMethod">Input Method</label>
+            <select id="inputMethod" class="control-select">
+              <option value="camera">Camera</option>
+              <option value="bluetooth">Bluetooth Scanner</option>
+              <option value="wifi">WiFi Scanner</option>
+              <option value="usb">USB Scanner</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="scanner-display">
+          <div id="reader" class="qr-reader"></div>
+          
+          <div class="manual-input" id="manualInput">
+            <input type="text" id="manualCode" placeholder="Enter barcode/QR code manually" 
+                   onkeypress="handleManualEntry(event)">
+            <button class="btn btn-primary" onclick="processManualEntry()">
+              ✓ Add Product
+            </button>
+          </div>
+        </div>
+
+        <div class="scanner-status" id="scanStatus">
+          <strong>Ready to scan</strong><br>
+          <em>Point camera at QR code or barcode</em>
+        </div>
+
+        <div style="margin-top: 20px; display: flex; gap: 10px;">
+          <button class="btn btn-success" id="startBtn" onclick="startScanner()">
+            ▶️ Start Scanner
+          </button>
+          <button class="btn btn-danger" id="stopBtn" onclick="stopScanner()" disabled>
+            ⏹️ Stop Scanner
+          </button>
+        </div>
+      </div>
+
+      <!-- Billing Section -->
+      <div class="billing-section">
+        <div class="customer-info">
+          <div class="control-group">
+            <label for="customerName">Customer Name</label>
+            <input type="text" id="customerName" class="control-input" placeholder="Enter customer name">
+          </div>
+          <div class="control-group">
+            <label for="customerPhone">Phone Number</label>
+            <input type="tel" id="customerPhone" class="control-input" placeholder="Enter phone number">
+          </div>
+        </div>
+
+        <div class="scanned-items" id="scannedItems">
+          <div class="empty-state">
+            <h3>📦 No items scanned yet</h3>
+            <p>Start scanning to add products</p>
+          </div>
+        </div>
+
+        <div class="totals-summary" id="totalsSummary" style="display: none;">
+          <div class="total-row">
+            <span>Items Count:</span>
+            <span id="itemCount">0</span>
+          </div>
+          <div class="total-row">
+            <span>Subtotal:</span>
+            <span>₹<span id="subtotalAmount">0.00</span></span>
+          </div>
+          <div class="total-row">
+            <span>Discount:</span>
+            <span>₹<span id="discountAmount">0.00</span></span>
+          </div>
+          <div class="total-row">
+            <span>GST:</span>
+            <span>₹<span id="gstAmount">0.00</span></span>
+          </div>
+          <div class="total-row grand-total">
+            <span>Grand Total:</span>
+            <span>₹<span id="grandTotalAmount">0.00</span></span>
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn btn-primary" onclick="showFullBill()" id="viewBillBtn" disabled>
+            📋 View Full Bill
+          </button>
+          <button class="btn btn-secondary" onclick="clearAll()">
+            🗑️ Clear All
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full Bill Modal -->
+  <div class="full-bill-modal" id="fullBillModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📄 Sales Invoice</h2>
+        <button class="close-modal" onclick="closeFullBill()">&times;</button>
+      </div>
+      
+      <div id="fullBillContent">
+        <!-- Bill content will be generated here -->
+      </div>
+
+      <div class="action-buttons" style="margin-top: 30px;">
+        <button class="btn btn-primary" onclick="printBill()">
+          🖨️ Print Bill
+        </button>
+        <button class="btn btn-success" onclick="saveBill()">
+          💾 Save Bill
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Firebase Configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyBWmCyJepagKmTy5kfBCOdaGKmcOymj4zg",
+      authDomain: "sunivox.firebaseapp.com",
+      projectId: "sunivox",
+      storageBucket: "sunivox.firebasestorage.app",
+      messagingSenderId: "866107015527",
+      appId: "1:866107015527:web:2c0733694e797dd7586fc2",
+      measurementId: "G-06NVXJVKV2"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Global Variables
+    let html5QrCode = null;
+    let scannerActive = false;
+    let invoiceItems = [];
+    let session = new URLSearchParams(location.search).get("session") || "defaultSession";
+    
+    // Audio for scan feedback
+    const beep = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+    beep.preload = 'auto';
+
+    // Initialize
+    document.getElementById('sessionInfo').textContent = `Session: ${session}`;
+
+    // Scanner Functions
+    function changeScanType() {
+      const scanType = document.getElementById('scanType').value;
+      const reader = document.getElementById('reader');
+      const manualInput = document.getElementById('manualInput');
+      
+      if (scanType === 'manual') {
+        reader.style.display = 'none';
+        manualInput.classList.add('active');
+        if (scannerActive) {
+          stopScanner();
+        }
+      } else {
+        reader.style.display = 'block';
+        manualInput.classList.remove('active');
+        
+        // Adjust scanner box size
+        if (scanType === 'barcode') {
+          reader.className = 'barcode-reader';
+        } else {
+          reader.className = 'qr-reader';
+        }
+      }
+    }
+
+    function startScanner() {
+      if (document.getElementById('scanType').value === 'manual') {
+        document.getElementById('manualCode').focus();
+        return;
+      }
+
+      if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("reader");
+      }
+
+      const scanType = document.getElementById('scanType').value;
+      const config = {
+        fps: 10,
+        qrbox: scanType === 'barcode' ? { width: 250, height: 100 } : { width: 250, height: 250 },
+        aspectRatio: scanType === 'barcode' ? 2.5 : 1.0
+      };
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        onScanSuccess,
+        onScanError
+      ).then(() => {
+        scannerActive = true;
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+        updateScanStatus("Scanner active - Ready to scan", "success");
+      }).catch(err => {
+        showAlert("Camera start error: " + err, "error");
+      });
+    }
+
+    function stopScanner() {
+      if (html5QrCode && scannerActive) {
+        html5QrCode.stop().then(() => {
+          scannerActive = false;
+          document.getElementById('startBtn').disabled = false;
+          document.getElementById('stopBtn').disabled = true;
+          updateScanStatus("Scanner stopped", "info");
+        });
+      }
+    }
+
+    function onScanSuccess(decodedText, decodedResult) {
+      if (!scannerActive) return;
+      
+      html5QrCode.pause();
+      beep.currentTime = 0;
+      beep.play();
+      
+      updateScanStatus(`Scanned: ${decodedText} - Looking up product...`, "processing");
+      
+      // Look up product in database
+      lookupProduct(decodedText);
+      
+      // Resume scanning after delay
+      setTimeout(() => {
+        if (scannerActive && html5QrCode) {
+          html5QrCode.resume();
+        }
+      }, 2000);
+    }
+
+    function onScanError(error) {
+      // Ignore scan errors (too frequent)
+    }
+
+    function handleManualEntry(event) {
+      if (event.key === 'Enter') {
+        processManualEntry();
+      }
+    }
+
+    function processManualEntry() {
+      const code = document.getElementById('manualCode').value.trim();
+      if (code) {
+        lookupProduct(code);
+        document.getElementById('manualCode').value = '';
+      }
+    }
+
+    function lookupProduct(code) {
+      db.collection("products").doc(code).get()
+        .then((docSnap) => {
+          if (docSnap.exists) {
+            const product = docSnap.data();
+            addItemToInvoice(code, product);
+            updateScanStatus(`✅ Added: ${product.name}`, "success");
+            beep.play();
+          } else {
+            updateScanStatus(`❌ Product not found: ${code}`, "error");
+            showAlert("Product not found in database", "error");
+          }
+        })
+        .catch((error) => {
+          updateScanStatus(`❌ Error: ${error.message}`, "error");
+          showAlert("Error fetching product data", "error");
+        });
+    }
+
+    function updateScanStatus(message, type) {
+      const statusEl = document.getElementById('scanStatus');
+      statusEl.innerHTML = `<strong>${message}</strong>`;
+      
+      // Add visual feedback based on type
+      statusEl.className = 'scanner-status';
+      if (type === 'success') {
+        statusEl.style.background = 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)';
+        statusEl.style.color = '#155724';
+      } else if (type === 'error') {
+        statusEl.style.background = 'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)';
+        statusEl.style.color = '#721c24';
+      } else {
+        statusEl.style.background = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
+        statusEl.style.color = '#333';
+      }
+    }
+
+    // Billing Functions
+    function addItemToInvoice(barcode, product) {
+      const existingItemIndex = invoiceItems.findIndex(item => item.barcode === barcode);
+      
+      if (existingItemIndex > -1) {
+        invoiceItems[existingItemIndex].quantity += 1;
+        showAlert(`Increased quantity of ${product.name}`, "success");
+      } else {
+        const item = {
+          barcode: barcode,
+          name: product.name,
+          brand: product.brand || 'N/A',
+          category: product.category || 'General',
+          hsnCode: product.hsnCode || '0000',
+          mrp: parseFloat(product.mrp) || 0,
+          gstRate: parseFloat(product.gstRate) || 0,
+          discount: parseFloat(product.discount) || 0,
+          unit: product.unit || 'pcs',
+          quantity: 1
+        };
+        invoiceItems.push(item);
+        showAlert(`Added ${product.name} to invoice`, "success");
+      }
+      
+      renderScannedItems();
+      updateTotals();
+    }
+
+    function renderScannedItems() {
+      const container = document.getElementById('scannedItems');
+      
+      if (invoiceItems.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <h3>📦 No items scanned yet</h3>
+            <p>Start scanning to add products</p>
+          </div>
+        `;
+        document.getElementById('viewBillBtn').disabled = true;
+        return;
+      }
+
+      container.innerHTML = invoiceItems.map((item, index) => {
+        const amounts = calculateItemAmount(item);
+        return `
+          <div class="item-card">
+            <div class="item-info">
+              <div class="item-name">${item.name}</div>
+              <div class="item-details">${item.brand} | ${item.unit} | ₹${item.mrp.toFixed(2)}</div>
+            </div>
+            <div class="item-controls">
+              <div class="quantity-control">
+                <button class="qty-btn" onclick="updateQuantity(${index}, ${item.quantity - 1})">-</button>
+                <input type="number" class="qty-input" value="${item.quantity}" 
+                       onchange="updateQuantity(${index}, this.value)" min="1">
+                <button class="qty-btn" onclick="updateQuantity(${index}, ${item.quantity + 1})">+</button>
+              </div>
+              <div class="item-amount">₹${amounts.totalAmount.toFixed(2)}</div>
+              <button class="btn-danger" style="padding: 6px 10px; font-size: 0.8rem;" 
+                      onclick="removeItem(${index})">🗑️</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('viewBillBtn').disabled = false;
+    }
+
+    function updateQuantity(index, quantity) {
+      const qty = parseInt(quantity);
+      if (qty <= 0) {
+        removeItem(index);
+        return;
+      }
+      invoiceItems[index].quantity = qty;
+      renderScannedItems();
+      updateTotals();
+    }
+
+    function removeItem(index) {
+      const itemName = invoiceItems[index].name;
+      invoiceItems.splice(index, 1);
+      renderScannedItems();
+      updateTotals();
+      showAlert(`Removed ${itemName}`, "success");
+    }
+
+    function calculateItemAmount(item) {
+      const baseAmount = item.mrp * item.quantity;
+      const discountAmount = (baseAmount * item.discount) / 100;
+      const taxableAmount = baseAmount - discountAmount;
+      const gstAmount = (taxableAmount * item.gstRate) / 100;
+      const totalAmount = taxableAmount + gstAmount;
+      
+      return {
+        baseAmount,
+        discountAmount,
+        taxableAmount,
+        gstAmount,
+        totalAmount
+      };
+    }
+
+
+
+function updateTotals() {
+  const summaryEl = document.getElementById('totalsSummary');
+  
+  if (invoiceItems.length === 0) {
+    summaryEl.style.display = 'none';
+    return;
+  }
+
+  summaryEl.style.display = 'block';
+
+  let itemCount = 0;
+  let subtotal = 0;
+  let totalDiscount = 0;
+  let totalGST = 0;
+  let grandTotal = 0;
+
+  invoiceItems.forEach(item => {
+    const amounts = calculateItemAmount(item);
+    itemCount += item.quantity;
+    subtotal += amounts.baseAmount;
+    totalDiscount += amounts.discountAmount;
+    totalGST += amounts.gstAmount;
+    grandTotal += amounts.totalAmount;
+  });
+
+  document.getElementById('itemCount').textContent = itemCount;
+  document.getElementById('subtotalAmount').textContent = subtotal.toFixed(2);
+  document.getElementById('discountAmount').textContent = totalDiscount.toFixed(2);
+  document.getElementById('gstAmount').textContent = totalGST.toFixed(2);
+  document.getElementById('grandTotalAmount').textContent = grandTotal.toFixed(2);
+}
+
+    </script>
+</body>
+</html>
