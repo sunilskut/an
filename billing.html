@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Enhanced Scanner & Billing System</title>
+  <title>Billing System</title>
   
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -483,7 +483,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>🛒 Enhanced Scanner & Billing System</h1>
+      <h1>🛒 Billing System</h1>
       <div class="header-actions">
         <button class="btn-header" onclick="window.open('salesBillGeneration.html', '_blank')">
           📄 New Bill
@@ -644,7 +644,7 @@
     const db = firebase.firestore();
 
     // Global Variables
-    let html5QrCode = null;
+
     let scannerActive = false;
     let invoiceItems = [];
     let session = new URLSearchParams(location.search).get("session") || "defaultSession";
@@ -652,6 +652,9 @@
     // Audio for scan feedback
     const beep = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
     beep.preload = 'auto';
+
+    // Create scanner
+    const html5QrCode = new Html5Qrcode("reader");
 
     // Initialize
     document.getElementById('sessionInfo').textContent = `Session: ${session}`;
@@ -681,7 +684,7 @@
       }
     }
 
-    function startScanner() {
+  /*  function startScanner() {
       if (document.getElementById('scanType').value === 'manual') {
         document.getElementById('manualCode').focus();
         return;
@@ -712,17 +715,53 @@
         showAlert("Camera start error: " + err, "error");
       });
     }
+  */
 
-    function stopScanner() {
-      if (html5QrCode && scannerActive) {
-        html5QrCode.stop().then(() => {
+
+function startScanner() {
+  // Clear the 'value' field in Firestore
+  db.collection("scans").doc(session).set({
+    value: null
+  }, { merge: true }) // merge ensures other fields are not overwritten
+  .then(() => {
+    alert("Ready to start scanner.");
+    scannerActive = true; 
+    document.getElementById('stopBtn').disabled = false;
+    document.getElementById('startBtn').disabled = true;
+    updateScanStatus("Scanner active - Ready to scan", "success");
+
+    html5QrCode.start(
+      { facingMode: "environment" }, // rear camera
+      {
+        fps: 10,
+        qrbox: { width: 250, height: 250 }
+      },
+      onScanSuccess,
+      (errorMessage) => {
+        // Ignore scan errors
+      }
+    ).catch(err => {
+      alert("Camera start error: " + err);
+    });
+
+  }).catch((error) => {
+    alert("Firestore update error: " + error);
+  });
+}
+
+
+
+    function stopScanner() { 
+    if (html5QrCode && scannerActive) { 
+        html5QrCode.stop().then(() => { 
           scannerActive = false;
           document.getElementById('startBtn').disabled = false;
           document.getElementById('stopBtn').disabled = true;
           updateScanStatus("Scanner stopped", "info");
         });
       }
-    }
+  
+ }
 
     function onScanSuccess(decodedText, decodedResult) {
       if (!scannerActive) return;
@@ -743,6 +782,33 @@
         }
       }, 2000);
     }
+
+/*
+function onScanSuccess(decodedText, decodedResult) {
+      // Pause scanning
+      html5QrCode.pause();
+
+      // Play beep immediately
+      beep.currentTime = 0;
+      beep.play();
+
+      // Write to Firestore
+      db.collection("scans").doc(session).set({
+        value: decodedText,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        console.log("✅ Data sent: " + decodedText);
+      }).catch((error) => {
+        alert("❌ Firestore Error: " + error);
+      }).finally(() => {
+        // Resume scanning after 1.5 seconds
+        setTimeout(() => {
+          html5QrCode.resume();
+        }, 1500);
+      });
+    }
+*/
+
 
     function onScanError(error) {
       // Ignore scan errors (too frequent)
