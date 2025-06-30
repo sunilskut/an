@@ -529,7 +529,7 @@
         </div>
         </div>
 
-        <div class="scanner-display">
+        <div class="scanner-display" id="scanArea" style="display: none;">
           <div id="reader" class="qr-reader"></div>
           
           <div class="manual-input" id="manualInput">
@@ -558,7 +558,8 @@
 
       <!-- Billing Section -->
       <div class="billing-section">
-        <div class="customer-info" style="display: none;" id="custInfo">
+
+     <!--   <div class="customer-info" style="display: none;" id="custInfo">
           <div class="control-group">
             <label for="customerName">Customer Name</label>
             <input type="text" id="customerName" class="control-input" placeholder="Enter customer name">
@@ -568,7 +569,7 @@
             <input type="tel" id="customerPhone" class="control-input" placeholder="Enter phone number">
           </div>
         </div>
-
+-->
         <div class="scanned-items" id="scannedItems">
           <div class="empty-state">
             <h3>📦 No items scanned yet</h3>
@@ -600,8 +601,8 @@
         </div>
 
         <div class="action-buttons">
-          <button class="btn btn-primary" onclick="showFullBill()" id="viewBillBtn" disabled>
-            📋 View Full Bill
+          <button class="btn btn-primary" onclick="billFinalise()" id="viewBillBtn">
+            📋 Bill Finalise
           </button>
           <button class="btn btn-secondary" onclick="clearAll()">
             🗑️ Clear All
@@ -736,6 +737,7 @@ function startScanner() {
     document.getElementById('startBtn').disabled = true;
     updateScanStatus("Scanner active - Ready to scan", "success");
     document.getElementById('scanSec').style.display = 'none';
+    document.getElementById('scanArea').style.display = 'block';
 
     html5QrCode.start(
       { facingMode: "environment" }, // rear camera
@@ -767,7 +769,7 @@ function startScanner() {
           updateScanStatus("Scanner stopped", "info");
         });
       }
-  document.getElementById('custInfo').style.display = 'block';
+//  document.getElementById('custInfo').style.display = 'block';
   document.getElementById('scanFullSec').style.display = 'none';
 
  }
@@ -1026,11 +1028,11 @@ function showAlert(message, type = "success") {
                 background-color: #4caf50;
                 color: white;
                 padding: 12px 20px;
-                border-radius: 6px;
+                border-radius: 10px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.2);
                 opacity: 0;
                 pointer-events: none;
-                transition: opacity 0.3s ease, transform 0.3s ease;
+                transition: opacity 0.2s ease, transform 0.2s ease;
                 z-index: 9999;
                 font-size: 14px;
             }
@@ -1057,13 +1059,110 @@ function showAlert(message, type = "success") {
     void alert.offsetWidth;
     alert.classList.add("show");
 
-    // Remove after 3 seconds
+    // Remove after 2 seconds
     setTimeout(() => {
         alert.classList.remove("show");
-        setTimeout(() => alert.remove(), 300);
-    }, 3000);
+        setTimeout(() => alert.remove(), 200);
+    }, 2000);
 }
 
+
+
+function askPhoneNumber() {
+  return new Promise((resolve) => {
+    if (document.getElementById("phonePromptOverlay")) return;
+
+    const overlay = document.createElement("div");
+    overlay.id = "phonePromptOverlay";
+    overlay.style = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    `;
+
+    const popup = document.createElement("div");
+    popup.style = `
+      background: white;
+      padding: 25px 30px;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+      text-align: center;
+      font-family: sans-serif;
+      position: relative;
+    `;
+
+    popup.innerHTML = `
+      <span id="closeBtn" style="
+        position: absolute;
+        top: 10px;
+        right: 15px;
+        font-size: 20px;
+        cursor: pointer;
+        color: red;
+        font-weight: bold;
+      ">&times;</span>
+      <h3 style="margin-bottom: 15px;">Enter Phone Number</h3>
+      <input type="tel" id="phoneInputBox" maxlength="10"
+             placeholder="10-digit number"
+             style="padding: 10px; width: 200px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; outline: none;" />
+      <br/><br/>
+      <button id="phoneSubmitBtn" style="padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer;">
+        Submit
+      </button>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const input = document.getElementById("phoneInputBox");
+    const button = document.getElementById("phoneSubmitBtn");
+    const closeBtn = document.getElementById("closeBtn");
+
+    const closePopup = (value = null) => {
+      document.body.removeChild(overlay);
+      resolve(value); // return null or phone number
+    };
+
+    const submit = () => {
+      const value = input.value.trim();
+      if (/^\d{10}$/.test(value)) {
+        closePopup(value);
+      } else {
+        showAlert("Please enter a valid 10-digit number.", "error");
+      }
+    };
+
+    button.onclick = submit;
+    closeBtn.onclick = () => closePopup(null);
+    input.onkeydown = (e) => {
+      if (e.key === "Enter") submit();
+    };
+
+    // Restrict input to digits only
+    input.addEventListener("input", (e) => {
+      e.target.value = e.target.value.replace(/\D/g, '');
+    });
+
+    input.focus();
+  });
+}
+
+
+function billFinalise() {
+
+askPhoneNumber().then((phone) => {
+  if (phone) {
+    alert("Phone submitted: " + phone);
+  } else {
+   // alert("Phone input canceled.");
+showAlert("Phone input canceled.","error");
+  }
+});
+}
 
     </script>
 </body>
