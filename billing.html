@@ -1002,6 +1002,59 @@ function updateTotals() {
   document.getElementById('grandTotalAmount').textContent = grandTotal.toFixed(2);
 }
 
+    function showAlert(message, type = "success") {
+    // Inject CSS only once
+    if (!document.getElementById("custom-alert-style")) {
+        const style = document.createElement("style");
+        style.id = "custom-alert-style";
+        style.textContent = `
+            .custom-alert {
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background-color: #4caf50;
+                color: white;
+                padding: 12px 20px;
+                border-radius: 6px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.3s ease, transform 0.3s ease;
+                z-index: 9999;
+                font-size: 14px;
+            }
+            .custom-alert.error {
+                background-color: #f44336;
+            }
+            .custom-alert.show {
+                opacity: 1;
+                pointer-events: auto;
+                transform: translateX(-50%) translateY(10px);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // Create alert div
+    const alert = document.createElement("div");
+    alert.className = `custom-alert ${type}`;
+    alert.innerText = message;
+
+    document.body.appendChild(alert);
+
+    // Force reflow
+    void alert.offsetWidth;
+    alert.classList.add("show");
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+        alert.classList.remove("show");
+        setTimeout(() => alert.remove(), 300);
+    }, 3000);
+}
+
+
     </script>
 </body>
 </html>
