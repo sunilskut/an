@@ -8,6 +8,8 @@
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator/qrcode.min.js"></script>
+
   
   <!-- QR/Barcode Scanner -->
   <script src="https://unpkg.com/html5-qrcode"></script>
@@ -654,6 +656,7 @@
 
     let scannerActive = false;
     let invoiceItems = [];
+    let grandTotalFinal = 10;
     let session = new URLSearchParams(location.search).get("session") || "defaultSession";
     
     // Audio for scan feedback
@@ -1011,6 +1014,8 @@ function updateTotals() {
   document.getElementById('discountAmount').textContent = totalDiscount.toFixed(2);
   document.getElementById('gstAmount').textContent = totalGST.toFixed(2);
   document.getElementById('grandTotalAmount').textContent = grandTotal.toFixed(2);
+
+  grandTotalFinal=parseFloat(grandTotal);
 }
 
 
@@ -1152,16 +1157,224 @@ function askPhoneNumber() {
 }
 
 
-function billFinalise() {
+function selectPaymentMode() {
+  return new Promise((resolve) => {
+    if (document.getElementById("paymentPromptOverlay")) return;
 
-askPhoneNumber().then((phone) => {
-  if (phone) {
-    alert("Phone submitted: " + phone);
-  } else {
-   // alert("Phone input canceled.");
-showAlert("Phone input canceled.","error");
+    const overlay = document.createElement("div");
+    overlay.id = "paymentPromptOverlay";
+    overlay.style = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    `;
+
+    const popup = document.createElement("div");
+    popup.style = `
+      background: white;
+      padding: 25px 30px;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+      text-align: left;
+      font-family: sans-serif;
+      position: relative;
+      width: 280px;
+    `;
+
+    popup.innerHTML = `
+      <span id="closePaymentBtn" style="
+        position: absolute;
+        top: 10px;
+        right: 15px;
+        font-size: 20px;
+        cursor: pointer;
+        color: red;
+        font-weight: bold;
+      ">&times;</span>
+      <h3 style="margin-bottom: 15px;">Select Payment Mode</h3>
+      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 16px;">
+        <label><input type="radio" name="paymentMode" value="UPI" checked> UPI</label>
+        <label><input type="radio" name="paymentMode" value="Cash"> Cash</label>
+        <label><input type="radio" name="paymentMode" value="Card"> Card</label>
+        <label><input type="radio" name="paymentMode" value="Others"> Others</label>
+      </div>
+      <br/>
+      <button id="paymentSubmitBtn" style="padding: 10px 20px; font-size: 16px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer;">
+        Submit
+      </button>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const closeBtn = document.getElementById("closePaymentBtn");
+    const submitBtn = document.getElementById("paymentSubmitBtn");
+
+    const closePopup = (value = null) => {
+      document.body.removeChild(overlay);
+      resolve(value); // null if cancelled, or selected payment mode
+    };
+
+    const submit = () => {
+      const selected = document.querySelector('input[name="paymentMode"]:checked');
+      if (selected) {
+        closePopup(selected.value);
+      } else {
+        showAlert("Please select a payment mode.", "error");
+      }
+    };
+
+    closeBtn.onclick = () => closePopup(null);
+    submitBtn.onclick = submit;
+  });
+}
+
+
+
+
+function showUPIPaymentPopup(grandTotalFinal) {
+  if (document.getElementById('upiOverlay')) return;
+
+  const upiID = "sunilskutan@oksbi";
+  const merchantName = "Sunil.S";
+  const upiLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(merchantName)}&am=${grandTotalFinal.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Customer')}`;
+
+  // Create overlay
+  const overlay = document.createElement("div");
+  overlay.id = "upiOverlay";
+  overlay.style = `
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  `;
+
+  // Create popup container
+  const popup = document.createElement("div");
+  popup.style = `
+    background: white;
+    padding: 20px 25px;
+    border-radius: 10px;
+    text-align: center;
+    max-width: 90%;
+    width: 300px;
+    font-family: sans-serif;
+    position: relative;
+  `;
+
+  // Close button
+  const closeBtn = document.createElement("span");
+  closeBtn.textContent = "×";
+  closeBtn.style = `
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    color: red;
+  `;
+  closeBtn.onclick = () => document.body.removeChild(overlay);
+  popup.appendChild(closeBtn);
+
+  // Heading
+  const heading = document.createElement("h3");
+  heading.textContent = "Scan to Pay";
+  popup.appendChild(heading);
+
+  // Amount display
+  const amountText = document.createElement("p");
+  amountText.textContent = `Amount: ₹${grandTotalFinal.toFixed(2)}`;
+  amountText.style = "font-weight: bold; font-size: 16px;";
+  popup.appendChild(amountText);
+
+  // QR code container
+  const qrDiv = document.createElement("div");
+  qrDiv.id = "qrcode-popup";
+  qrDiv.style = "margin: 10px 0;";
+  popup.appendChild(qrDiv);
+
+  // Payment link
+  const payLink = document.createElement("a");
+  payLink.id = "payLink-popup";
+  payLink.href = upiLink;
+  payLink.textContent = "Open UPI App";
+  payLink.style = "display: inline-block; margin-top: 10px; color: blue; text-decoration: underline; font-size: 14px;";
+  payLink.onclick = function (e) {
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      window.location.href = upiLink;
+    } else {
+      alert("Scan the QR code using your UPI app.");
+      e.preventDefault();
+    }
+  };
+  popup.appendChild(payLink);
+
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
+
+  // Generate QR Code
+  try {
+    const qr = qrcode(0, 'M');
+    qr.addData(upiLink);
+    qr.make();
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const cellSize = 4;
+    const margin = 10;
+    const size = qr.getModuleCount();
+    canvas.width = canvas.height = size * cellSize + margin * 2;
+
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#000';
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        if (qr.isDark(row, col)) {
+          ctx.fillRect(col * cellSize + margin, row * cellSize + margin, cellSize, cellSize);
+        }
+      }
+    }
+
+    qrDiv.appendChild(canvas);
+  } catch (err) {
+    qrDiv.innerHTML = `<p>QR generation failed. UPI Link: ${upiLink}</p>`;
   }
-});
+}
+
+function billFinalise() {
+  askPhoneNumber().then((phone) => {
+    if (!phone) {
+      showAlert("Phone input canceled.", "error");
+      return;
+    }
+
+    // Proceed to select payment mode
+    selectPaymentMode().then((mode) => {
+      if (!mode) {
+        showAlert("Payment Mode selection cancelled.", "error");
+        return;
+      }
+
+      // If payment mode is UPI, show UPI QR popup
+      if (mode.toLowerCase() === "upi") {
+        showUPIPaymentPopup(grandTotalFinal);
+      }
+
+      // Optional: handle other modes like Cash/Card
+      console.log("Phone:", phone, "Mode:", mode);
+      // showAlert(`Phone: ${phone}, Mode: ${mode}`, "success");
+    });
+  });
 }
 
     </script>
