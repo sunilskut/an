@@ -485,8 +485,11 @@
     <div class="header">
       <h1>🛒 Billing System</h1>
       <div class="header-actions">
-        <button class="btn-header" onclick="window.open('salesBillGeneration.html', '_blank')">
+	<button class="btn-header" onclick="location.reload();">
           📄 New Bill
+        </button>
+        <button class="btn-header" onclick="window.open('salesBillGeneration.html', '_blank')">
+          📄 Another Bill
         </button>
         <button class="btn-header" onclick="showSettings()">
           ⚙️ Settings
@@ -497,7 +500,9 @@
 
     <div class="main-content">
       <!-- Scanner Section -->
-      <div class="scanner-section">
+      <div class="scanner-section" id="scanFullSec" >
+
+      <div id="scanSec" >
         <div class="scanner-header">
           <h2>📷 Product Scanner</h2>
         </div>
@@ -521,6 +526,7 @@
               <option value="usb">USB Scanner</option>
             </select>
           </div>
+        </div>
         </div>
 
         <div class="scanner-display">
@@ -552,7 +558,7 @@
 
       <!-- Billing Section -->
       <div class="billing-section">
-        <div class="customer-info"  style="display: none;">
+        <div class="customer-info" style="display: none;" id="custInfo">
           <div class="control-group">
             <label for="customerName">Customer Name</label>
             <input type="text" id="customerName" class="control-input" placeholder="Enter customer name">
@@ -729,6 +735,7 @@ function startScanner() {
     document.getElementById('stopBtn').disabled = false;
     document.getElementById('startBtn').disabled = true;
     updateScanStatus("Scanner active - Ready to scan", "success");
+    document.getElementById('scanSec').style.display = 'none';
 
     html5QrCode.start(
       { facingMode: "environment" }, // rear camera
@@ -760,7 +767,9 @@ function startScanner() {
           updateScanStatus("Scanner stopped", "info");
         });
       }
-  
+  document.getElementById('custInfo').style.display = 'block';
+  document.getElementById('scanFullSec').style.display = 'none';
+
  }
 
     function onScanSuccess(decodedText, decodedResult) {
@@ -1002,7 +1011,8 @@ function updateTotals() {
   document.getElementById('grandTotalAmount').textContent = grandTotal.toFixed(2);
 }
 
-    function showAlert(message, type = "success") {
+
+function showAlert(message, type = "success") {
     // Inject CSS only once
     if (!document.getElementById("custom-alert-style")) {
         const style = document.createElement("style");
